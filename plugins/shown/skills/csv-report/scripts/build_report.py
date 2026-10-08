@@ -490,7 +490,23 @@ def ascat_metrics(segs):
     return out
 
 
-def consistency_warnings(out_patients, segs_by, questions):
+SEX_COL_RX = re.compile(r"^sex\b|gender|性别", re.I)
+PLOIDY_COL_RX = re.compile(r"ploidy|^psi([_.\s]|$)|倍性|倍体", re.I)
+
+
+def _attr_like(attributes, rx):
+    for a in attributes:
+        if rx.search(a["key"]) or rx.search(a.get("label") or ""):
+            return a
+    return None
+
+
+def _x_mean(segs):
+    tot = [(s["end"] - s["start"] + 1, s["total"]) for s in segs if s["chrom"] == "X" and s["total"] is not None]
+    return sum(L * c for L, c in tot) / float(sum(L for L, _ in tot)) if tot else None
+
+
+def consistency_warnings(out_patients, segs_by, questions, attributes=()):
     """Cross-checks between mapped values and the segments; each points at a likely mapping problem."""
     warns = []
     ploidy_off, male_x, borderline, overlap, no_sex = [], [], [], [], []
@@ -507,12 +523,9 @@ def consistency_warnings(out_patients, segs_by, questions):
             continue
         if p["sex"] not in ("XX", "XY") and any(s["chrom"] in SEX_CHROMS for s in segs):
             no_sex.append(p["id"])
-        tot = [(s["end"] - s["start"] + 1, s["total"]) for s in segs if s["chrom"] == "X" and s["total"] is not None]
-        if p["sex"] == "XY" and tot:
-            x_mean = sum(L * c for L, c in tot) / float(sum(L for L, _ in tot))
-            base = baseline_cn(p)
-            if x_mean >= 0.75 * base:
-                male_x.append("%s (chrX %.1f)" % (p["id"], x_mean))
+        x_mean = _x_mean(segs)
+        if p["sex"] == "XY" and x_mean is not None and x_mean >= 0.75 * baseline_cn(p):
+            male_x.append("%s (chrX %.1f)" % (p["id"], x_mean))
         last_end, n_over = {}, 0
         for s in segs:
             if s["start"] < last_end.get(s["chrom"], -1) - 1000:
@@ -539,6 +552,44 @@ def consistency_warnings(out_patients, segs_by, questions):
         warns.append("WGD call is borderline for %d patient(s) (the two most common major-allele states cover almost "
                      "the same share of the genome): %s. Treat their WGD / GI values with care."
                      % (len(borderline), ", ".join(borderline[:8])))
+    # columns that look like sex / ploidy but were left unmapped: check them against the segments too,
+    # so the questions name the real column instead of asking whether one exists
+    sex_attr = _attr_like(attributes, SEX_COL_RX) if no_sex else None
+    if sex_attr:
+        adjusted, unadjusted = [], []
+        for p in out_patients:
+            raw = p["attrs"].get(sex_attr["key"])
+            sx = SEX_SYNONYMS.get(str(raw).strip().upper(), SEX_SYNONYMS.get(str(raw).strip())) if raw is not None else None
+            xm = _x_mean(segs_by.get(p["id"], []))
+            if sx != "XY" or xm is None or p["id"] not in no_sex:
+                continue
+            (unadjusted if xm >= 0.75 * baseline_cn(p) else adjusted).append("%s (chrX %.1f)" % (p["id"], xm))
+        if unadjusted and len(unadjusted) >= len(adjusted):
+            ask(questions, "sex", "Column %r looks like sex but is not mapped. chrX in %d male patient(s) is at the "
+                "autosomal level (%s), so the copy-number caller probably did not adjust X for sex. Keep sex "
+                "unmapped, so X/Y are not called?" % (sex_attr["key"], len(unadjusted), ", ".join(unadjusted[:3])),
+                "yes - keep sex unmapped; show it only as an attribute")
+            no_sex = []
+        elif adjusted:
+            ask(questions, "sex", "Column %r looks like sex but is not mapped. Males show about one X copy (%s), so "
+                "mapping it as 'sex' would let X/Y gains and losses be called. Map it?"
+                % (sex_attr["key"], ", ".join(adjusted[:3])), "yes - map it as sex")
+            no_sex = []
+    ploidy_attr = _attr_like(attributes, PLOIDY_COL_RX)
+    if ploidy_attr:
+        off = []
+        for p in out_patients:
+            v, derived = p["attrs"].get(ploidy_attr["key"]), p["metrics"].get("ploidy_from_segments")
+            if p["ploidy_source"] == "segments" and isinstance(v, (int, float)) and derived is not None \
+                    and abs(v - derived) > 0.5:
+                off.append("%s (%.2f vs %.2f)" % (p["id"], v, derived))
+        if off:
+            warns.append("unmapped column %r looks like ploidy and differs from the segments by more than 0.5 for %d "
+                         "patient(s): %s" % (ploidy_attr["key"], len(off), ", ".join(off[:6])))
+            ask(questions, "ploidy", "Column %r looks like ploidy but is not mapped; it disagrees with the segments "
+                "for %d patient(s) (%s). Keep using the ploidy implied by the segments and show %r only as an "
+                "attribute?" % (ploidy_attr["key"], len(off), ", ".join(off[:3]), ploidy_attr["key"]),
+                "yes - segments set the baseline")
     if no_sex:
         warns.append("sex is unknown for %d patient(s) with chrX/chrY segments (%s): X and Y are left out of the "
                      "gain/loss calls (heatmap, frequency plot, summary) instead of showing male X/Y as 'loss'. Map "
@@ -939,7 +990,7 @@ def build(mapping, base):
     if downsampled:
         warnings.append("bins down-sampled to %d points for %d patient(s) to keep the HTML light"
                         % (max_points, len(downsampled)))
-    warnings += consistency_warnings(out_patients, segs_by, questions)
+    warnings += consistency_warnings(out_patients, segs_by, questions, attributes)
 
     sv_rows = []
     for s in svs:

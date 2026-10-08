@@ -407,6 +407,23 @@ class BenchmarkFixTests(FixtureMixin, unittest.TestCase):
         r2 = run([os.path.join(SCRIPTS, "build_report.py"), m2, "--check"])
         self.assertIn("questions for the user: none", r2.stdout)
 
+    def test_unmapped_sex_and_ploidy_columns_are_checked(self):
+        rows = "".join("%s,%s,1,%d,%d,%d\n" % r for r in [
+            ("M1", "1", 249000000, 1, 1), ("M1", "X", 155000000, 1, 1),
+            ("M2", "1", 249000000, 1, 1), ("M2", "X", 155000000, 1, 1)])
+        self.write("s.csv", "id,chr,s,e,maj,min\n" + rows)
+        self.write("p.csv", "id,Sex (M/F),Est. ploidy\nM1,M,3.9\nM2,M,4.1\n")
+        m = self.mapping({"genome": "hg19", "tables": [
+            {"file": "p.csv", "kind": "patients", "columns": {"patient": "id"}},
+            {"file": "s.csv", "kind": "segments", "columns": {"patient": "id", "chrom": "chr", "start": "s", "end": "e",
+                                                               "major_cn": "maj", "minor_cn": "min"}}]})
+        qs = build_report.build(self.load(m), self.d)["meta"]["questions"]
+        text = " ".join(q["question"] for q in qs)
+        self.assertIn("'Sex (M/F)' looks like sex but is not mapped", text)
+        self.assertIn("did not adjust X for sex", text)
+        self.assertIn("'Est. ploidy' looks like ploidy", text)
+        self.assertNotIn("Is there a sex column", text)
+
     def test_benchmark_mappings_still_build(self):
         bench = os.path.join(ROOT, "oncology_benchmark_results")
         if not os.path.isdir(bench):

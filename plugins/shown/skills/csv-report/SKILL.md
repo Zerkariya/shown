@@ -149,6 +149,15 @@ contains this SKILL.md. Below, `$SKILL` stands for that directory. Only
    - Keep it short. Merge related points and ask at most about 7 questions.
      Skip what the user already told you or what the data settles beyond
      doubt.
+   - When there are more than 7, ask in this order and state the rest as
+     defaults in the summary:
+     1. anything that changes the calls or the plots: patient IDs, ploidy,
+        sex, genome build, which source to draw, units;
+     2. columns whose meaning you inferred;
+     3. presentation: `group_by`, title.
+   - Do not ask about the report language. The default view is English and
+     the page has a 中文 button; mention that. Set `"language": "zh"` only if
+     the user asked for Chinese as the default.
    - Use your environment's structured question tool if it has one (e.g.
      `AskUserQuestion` in Claude Code, which takes up to 4 questions per
      call); otherwise ask in plain text. Do not build the report (step 7)
@@ -156,7 +165,9 @@ contains this SKILL.md. Below, `$SKILL` stands for that directory. Only
    - Apply the answers to `mapping.json` and re-run `--check`. Ask again only
      about new questions the answers created.
    - Skip the confirmation only when the user said not to ask ("just do it",
-     "不用问") or nobody can answer (a non-interactive run). Then use the
+     "不用问"), or when no person will read your reply before the run ends
+     (a scheduled or headless batch job). A normal chat counts as
+     interactive, even without a question tool. When you skip, use the
      defaults and list every one of them as an assumption in step 8.
 
 6. **Optional: insights.** From the printed `summary` only, write 3-6 short,
@@ -204,8 +215,11 @@ Examples:
   and the user wants that. Arm boundaries need centromere positions for the
   right genome build (e.g. the UCSC cytoBand file). Ask the user for that
   file rather than guessing coordinates.
-- If segments for the same patients also exist, check whether the two
-  sources agree, and tell the user.
+- If segments for the same patients also exist, mention in step 5 that there
+  are two copy-number sources and ask which one is authoritative. A rough
+  agreement check is optional; without centromere positions, compare the
+  first and last segment of each chromosome with the p and q arm calls. Say
+  that it is approximate.
 
 ASCAT's `Tumor_LogR.txt` / `Tumor_BAF.txt` (one column per sample) do **not**
 need this: add one `bins` entry per sample with `"patient": {"value": "S1"}` and
