@@ -1,4 +1,4 @@
-# Delly and ASCAT outputs: what they look like and how to map them
+# Native tool outputs (Delly, ASCAT, CNVkit, ...): what they look like and how to map them
 
 Use this to recognize native tool output among the user's files. Their own
 CSVs are often re-exports of these with renamed or extra columns.
@@ -100,3 +100,48 @@ sex chromosomes excluded):
 - `GI`: 1 − fraction at the WGD baseline (1+1 or 2+2)
 - `homdel_*`: nMajor = nMinor = 0
 - `FGA` (extra): fraction whose total CN differs from its mode
+
+## CNVkit (github.com/etal/cnvkit): read-depth CNV for targeted / exome / WGS
+
+CNVkit writes one file per sample. The sample name usually appears only in
+the file name, so use a glob plus `"patient": {"from_filename": "^(.+?)\\.call\\.cns$"}`.
+
+- `<sample>.cnr` (bins): `chromosome start end gene depth log2 weight`
+  - map to `bins`: `logr` = log2; `start`/`end` give the midpoint
+- `<sample>.cns` (segments): `chromosome start end gene log2 depth probes weight`,
+  optionally `ci_lo ci_hi`
+  - map to `segments`: `logr` = log2, `n_markers` = probes
+  - no copy number here; the report shows LogR only
+- `<sample>.call.cns` (`cnvkit.py call`): adds `cn`, the integer total CN
+  - with `--vcf` it also adds `baf`, `cn1`, `cn2`: allele-specific integer CN
+    (larger / smaller allele; the builder swaps them if needed)
+  - map `total_cn` = cn, `major_cn` = cn1, `minor_cn` = cn2, `baf` = baf
+  - before mapping, check on a few rows that cn = cn1 + cn2
+- `log2` is relative to the reference, not purity-corrected. `cn` is
+  purity-corrected only if `call` was run with `--purity`.
+- chrX depends on the reference / sample sex options (`-y`, `--sample-sex`).
+  Map `sex` only if male chrX sits at about one copy. The builder warns
+  otherwise.
+- The `gene` column is often a list or a placeholder; leave it unmapped.
+
+## Other common copy-number outputs
+
+Column names vary by tool version, so confirm them with the profiler.
+
+- **IGV / DNAcopy `.seg`** (also `cnvkit.py export seg`):
+  - columns: `ID chrom loc.start loc.end num.mark seg.mean`
+  - map to `segments`: `patient` = ID, `logr` = seg.mean, `n_markers` = num.mark
+- **FACETS:** `chrom start end … cnlr.median … tcn.em lcn.em cf.em`
+  - map `total_cn` = tcn.em and `minor_cn` = lcn.em; nMajor is derived as
+    total − minor
+  - `lcn.em` can be NA; those segments are drawn as total CN only
+  - `chrom` 23 means X
+- **Sequenza** `*_segments.txt`:
+  - columns: `chromosome start.pos end.pos Bf … depth.ratio … CNt A B`
+  - map `total_cn` = CNt, `major_cn` = A, `minor_cn` = B
+- **PURPLE** `*.purple.cnv.somatic.tsv`:
+  - columns: `chromosome start end copyNumber … minorAlleleCopyNumber majorAlleleCopyNumber`
+  - these are floats: map them as `total_raw` / `minor_raw` / `major_raw`
+  - add `round` transforms on the same columns for `total_cn` / `minor_cn` /
+    `major_cn`
+  - purity and ploidy are in `*.purple.purity.tsv` (`kind: patients`)

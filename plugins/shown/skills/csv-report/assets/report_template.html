@@ -247,10 +247,10 @@ var I18N = {
     filtered: "被过滤", mapping: "列映射", unused: "未使用的列", warnings: "提示", no_warnings: "没有提示",
     attr_list: "患者字段", field: "字段", label: "显示名", definitions: "指标定义", raw_mapping: "mapping.json 原文",
     kind_patients: "患者信息", kind_segments: "拷贝数片段", kind_variants: "结构变异", kind_bins: "Bin / SNP 数据",
-    metrics: "指标", n_segs: "片段数", show_more: "显示更多", none: "无",
+    metrics: "指标", n_segs: "片段数", show_more: "显示更多", none: "无", borderline: "临界",
     def_purity: "肿瘤细胞比例（ASCAT 的 purity / aberrant cell fraction）。",
     def_ploidy: "平均拷贝数；如表中未提供，则按片段长度加权平均 nMajor+nMinor 推算。",
-    def_wgd: "全基因组加倍：按 ascat.metrics，常染色体上主等位基因拷贝数众数为 1 → 0，2 → 1，3–5 → 1+。",
+    def_wgd: "全基因组加倍：按 ascat.metrics，常染色体上主等位基因拷贝数众数为 1 → 0，2 → 1，3–5 → 1+。若第二常见的状态覆盖的基因组比例与众数相差不到 5%，标记为“临界”。",
     def_gi: "基因组不稳定性：常染色体上偏离 WGD 基线状态（1+1 或 2+2）的基因组比例（ascat.metrics 定义）。",
     def_loh: "杂合性缺失：常染色体上 nMinor = 0 的基因组比例。",
     def_fga: "基因组改变比例：常染色体上总拷贝数不等于其众数的比例（只有总拷贝数时也可计算）。",
@@ -287,10 +287,10 @@ var I18N = {
     filtered: "Filtered", mapping: "Column mapping", unused: "Unused columns", warnings: "Notes", no_warnings: "No notes",
     attr_list: "Patient fields", field: "Field", label: "Label", definitions: "Definitions", raw_mapping: "mapping.json",
     kind_patients: "Patient info", kind_segments: "CN segments", kind_variants: "Variants", kind_bins: "Bins / SNPs",
-    metrics: "Metrics", n_segs: "Segments", show_more: "Show more", none: "none",
+    metrics: "Metrics", n_segs: "Segments", show_more: "Show more", none: "none", borderline: "borderline",
     def_purity: "Tumour cell fraction (ASCAT purity / aberrant cell fraction).",
     def_ploidy: "Average copy number; when not given, the length-weighted mean of nMajor+nMinor over segments.",
-    def_wgd: "Whole-genome doubling as in ascat.metrics: autosomal mode of the major allele 1 -> 0, 2 -> 1, 3-5 -> 1+.",
+    def_wgd: "Whole-genome doubling as in ascat.metrics: autosomal mode of the major allele 1 -> 0, 2 -> 1, 3-5 -> 1+. Marked borderline when the runner-up state covers within 5% as much of the genome.",
     def_gi: "Genomic instability: autosomal fraction not at the WGD baseline state (1+1 or 2+2), as in ascat.metrics.",
     def_loh: "Loss of heterozygosity: autosomal fraction with nMinor = 0.",
     def_fga: "Fraction genome altered: autosomal fraction whose total CN differs from its mode (works with total CN only).",
@@ -995,7 +995,7 @@ function metricCols() {
   if (P.some(function (p) { return p.purity != null; })) cols.push({ label: t("purity"), num: true, get: function (p) { return p.purity; }, fmt: function (v) { return fmtPct(v); } });
   if (P.some(function (p) { return p.ploidy != null; })) cols.push({ label: t("ploidy"), num: true, get: function (p) { return p.ploidy; }, fmt: function (v) { return fmtNum(v, 2); } });
   if (P.some(function (p) { return p.goodness_of_fit != null; })) cols.push({ label: t("gof"), num: true, get: function (p) { return p.goodness_of_fit; }, fmt: function (v) { return fmtNum(v, 1) + "%"; } });
-  if (has("WGD")) cols.push({ label: "WGD", num: true, get: function (p) { var w = p.metrics.WGD; return w == null ? null : w === "1+" ? 2 : w; }, fmt: function (v, p) { return String(p.metrics.WGD); } });
+  if (has("WGD")) cols.push({ label: "WGD", num: true, get: function (p) { var w = p.metrics.WGD; return w == null ? null : w === "1+" ? 2 : w; }, fmt: function (v, p) { return String(p.metrics.WGD) + (p.metrics.WGD_borderline ? " (" + t("borderline") + ")" : ""); } });
   [["GI", "GI"], ["LOH", "LOH"], ["FGA", "FGA"]].forEach(function (kv) {
     if (has(kv[0])) cols.push({ label: kv[1], num: true, get: function (p) { return p.metrics[kv[0]]; }, fmt: function (v) { return fmtPct(v); } });
   });
@@ -1380,7 +1380,7 @@ function renderPatient(root) {
     chips.appendChild(h("span", { class: "chip" }, lbl(a) + ": ", h("b", { text: attrFmt(a, v) })));
   });
   var m = p.metrics;
-  if (m.WGD != null) chips.appendChild(h("span", { class: "chip" }, "WGD: ", h("b", { text: String(m.WGD) })));
+  if (m.WGD != null) chips.appendChild(h("span", { class: "chip" }, "WGD: ", h("b", { text: String(m.WGD) + (m.WGD_borderline ? " (" + t("borderline") + ")" : "") })));
   [["GI", "GI"], ["LOH", "LOH"], ["FGA", "FGA"], ["homdel_fraction", LANG === "en" ? "HomDel" : "纯合缺失"]].forEach(function (kv) {
     if (m[kv[0]] != null) chips.appendChild(h("span", { class: "chip" }, kv[1] + ": ", h("b", { text: fmtPct(m[kv[0]], 1) })));
   });
