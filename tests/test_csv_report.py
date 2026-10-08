@@ -198,7 +198,8 @@ class BuildTests(FixtureMixin, unittest.TestCase):
         # HTML is written and the payload cannot break out of its <script>
         out = os.environ.get("CSV_REPORT_KEEP_HTML") or os.path.join(self.d, "r.html")
         build_report.write_html(data, out)
-        html = open(out, encoding="utf-8").read()
+        with open(out, encoding="utf-8") as fh:
+            html = fh.read()
         self.assertNotIn("__REPORT_DATA__", html)
         self.assertEqual(html.count("</script>"), 2)
 
@@ -310,6 +311,91 @@ class ProfileHintTests(FixtureMixin, unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn("warnings: none", r.stdout)
         self.assertFalse(os.path.exists(cache))
+
+
+class BenchmarkFixTests(FixtureMixin, unittest.TestCase):
+    """Issues found by the oncology benchmark (oncology_benchmark_results/README_结果说明.md)."""
+
+    def test_decimal_commas(self):
+        p = self.write("eu.csv", "sample;chr;start;end;logr;n\nA;1;1;1000;0,0093;1,234\nA;1;1001;2000;-0,512;2,500\n",
+                       encoding="gb18030")
+        t = tableio.read_table(p)
+        self.assertEqual(t.meta.get("decimal_comma_columns"), ["logr", "n"])
+        self.assertEqual([r[4] for r in t.rows], ["0.0093", "-0.512"])
+        # a comma-delimited file with only thousands-style values keeps them as thousands
+        p2 = self.write("us.csv", 'id,reads\nA,"1,234"\nB,"12,500"\n')
+        t2 = tableio.read_table(p2)
+        self.assertNotIn("decimal_comma_columns", t2.meta)
+        self.assertEqual(tableio.parse_number(t2.rows[0][1]), 1234.0)
+
+    def test_footer_note_rows(self):
+        p = self.write("c.csv", "id,age,stage\nP1,50,II\nP2,61,III\nEnd of sheet: values are simulated,,\n")
+        t = tableio.read_table(p)
+        self.assertEqual([r[0] for r in t.rows], ["P1", "P2"])
+        self.assertEqual(t.meta["footer_rows_dropped"], ["End of sheet: values are simulated"])
+
+    def test_profile_hints(self):
+        def hints(name, typ, vals):
+            info = {"unique": len(set(vals)), "missing": 0}
+            if typ in ("integer", "float"):
+                nums = [float(v) for v in vals]
+                info.update(min=min(nums), max=max(nums), median=sorted(nums)[len(nums) // 2])
+            return profile_table.hints_for(name, typ, info, vals)
+        self.assertIn("ploidy", hints("psi_fit", "float", ["2", "2", "2"]))
+        self.assertNotIn("goodness_of_fit", hints("psi_fit", "float", ["2", "2", "2"]))
+        self.assertEqual(hints("Unnamed: 9", "empty", ["", "", ""]), [])
+        self.assertIn("patient", hints("PID", "category", ["P1", "P1", "P2"]))
+        self.assertIn("start", hints("position_hg19", "integer", ["100000", "200000", "300000"]))
+        vcf_id = hints("ID", "text", ["SV0001", "SV0002", "SV0003"])
+        self.assertNotIn("patient", vcf_id)
+        self.assertIn("variant / record ID (not a patient ID)", vcf_id)
+
+    def test_integer_scores_are_numeric(self):
+        self.assertEqual(build_report.infer_attr_type(["32", "35", "38", "40", "42"]), "numeric")
+        self.assertEqual(build_report.infer_attr_type(["0", "1", "1", "0"]), "category")
+        self.assertEqual(build_report.infer_attr_type(["1", "2", "3", "4"]), "category")
+
+    def test_swapped_segments_bins_sources_and_genome(self):
+        self.write("s.csv", "id,chr,s,e,cn\nA,1,90000,45000,2\nA,1,100000,200000,3\n")
+        self.write("b1.csv", "id,chr,pos,logr\nA,1,1000,0.1\n")
+        self.write("b2.csv", "id,chr,pos,logr\nA,1,2000,0.2\n")
+        m = self.mapping({"tables": [
+            {"file": "s.csv", "kind": "segments", "columns": {"patient": "id", "chrom": "chr", "start": "s", "end": "e", "total_cn": "cn"}},
+            {"file": "b1.csv", "kind": "bins", "columns": {"patient": "id", "chrom": "chr", "pos": "pos", "logr": "logr"}},
+            {"file": "b2.csv", "kind": "bins", "columns": {"patient": "id", "chrom": "chr", "pos": "pos", "logr": "logr"}}]})
+        w = " ".join(build_report.build(self.load(m), self.d)["meta"]["warnings"])
+        self.assertIn("end < start", w)
+        self.assertIn("more than one table", w)
+        self.assertIn("genome build not given", w)
+
+    def test_clinical_only_has_no_genome(self):
+        self.write("p.csv", "id,age\nA,50\nB,60\n")
+        m = self.mapping({"tables": [{"file": "p.csv", "kind": "patients", "columns": {"patient": "id"}}]})
+        data = build_report.build(self.load(m), self.d)
+        self.assertIsNone(data["meta"]["genome"])
+        self.assertEqual(data["meta"]["warnings"], [])
+
+    def test_unknown_sex_leaves_x_uncalled(self):
+        rows = "".join("%s,%s,1,%d,%d,%d\n" % r for r in [
+            ("M1", "1", 249000000, 1, 1), ("M1", "X", 155000000, 1, 0),
+            ("M2", "1", 249000000, 1, 1), ("M2", "X", 155000000, 1, 0)])
+        self.write("s.csv", "id,chr,s,e,maj,min\n" + rows)
+        m = self.mapping({"genome": "hg19", "tables": [{"file": "s.csv", "kind": "segments", "columns": {
+            "patient": "id", "chrom": "chr", "start": "s", "end": "e", "major_cn": "maj", "minor_cn": "min"}}]})
+        data = build_report.build(self.load(m), self.d)
+        self.assertTrue(any("sex is unknown" in w for w in data["meta"]["warnings"]))
+        losses = build_report.summarize(data).get("chromosome_losses", [])
+        self.assertNotIn("chrX", [c for c, _ in losses])
+
+    def test_benchmark_mappings_still_build(self):
+        bench = os.path.join(ROOT, "oncology_benchmark_results")
+        if not os.path.isdir(bench):
+            self.skipTest("benchmark folder not present")
+        for name in sorted(os.listdir(bench)):
+            m = os.path.join(bench, name, "mapping.json")
+            if os.path.exists(m):
+                r = run([os.path.join(SCRIPTS, "build_report.py"), m, "--check"])
+                self.assertEqual(r.returncode, 0, "%s: %s" % (name, r.stderr))
 
 
 if __name__ == "__main__":

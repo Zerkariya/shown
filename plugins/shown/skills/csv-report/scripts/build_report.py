@@ -32,7 +32,7 @@ sys.path.insert(0, HERE)
 import tableio  # noqa: E402
 
 TEMPLATE = os.path.join(HERE, "..", "assets", "report_template.html")
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 
 GENOMES = {
     # 1..22, X, Y lengths; X/Y lengths for hg19/hg38/CHM13 (ASCAT ships 1..22,X for all three)
@@ -265,7 +265,7 @@ def load_table_spec(spec, base, ti):
         raise MappingError("tables[%d] (%s): unknown canonical field(s) %s; allowed: %s"
                            % (ti, kind, unknown, ", ".join(sorted(allowed))))
     transforms = spec.get("transforms") or {}
-    out_rows, sources = [], []
+    out_rows, sources, notes = [], [], []
     for path in resolve_files(spec.get("file") or spec.get("files"), base):
         t = tableio.read_table(path, sheet=spec.get("sheet"), header_row=spec.get("header_row"),
                                delimiter=spec.get("delimiter"))
@@ -321,6 +321,12 @@ def load_table_spec(spec, base, ti):
             if extra_cols:
                 rec["_extra"] = [row[idx[c]] for c in extra_cols]
             out_rows.append(rec)
+        if t.meta.get("footer_rows_dropped"):
+            notes.append("%s: dropped note row(s) at the end of the table: %s"
+                         % (label, " | ".join(t.meta["footer_rows_dropped"])[:200]))
+        if t.meta.get("decimal_comma_columns"):
+            notes.append("%s: decimal commas (0,55) read as decimal points in: %s"
+                         % (label, ", ".join(t.meta["decimal_comma_columns"])))
         sources.append({"table": ti, "kind": kind, "file": os.path.relpath(path, base), "sheet": t.sheet,
                         "format": t.format, "header_row": t.header_row, "rows": n_in, "filtered_out": n_filtered,
                         "columns": t.columns,
@@ -330,7 +336,7 @@ def load_table_spec(spec, base, ti):
                         "attributes": attr_cols, "extra_columns": extra_cols,
                         "unused_columns": [c for c in t.columns if c not in used and c not in attr_cols
                                            and c not in extra_cols]})
-    return kind, out_rows, sources, (extra_cols if kind == "variants" else [])
+    return kind, out_rows, sources, (extra_cols if kind == "variants" else []), notes
 
 
 # --------------------------------------------------------------------------- #
@@ -343,7 +349,7 @@ def infer_attr_type(values):
     nums = [tableio.parse_number(v) for v in present]
     if all(x is not None for x in nums):
         # small integer codes (0/1 flags, grade 1-4) read better as categories
-        codes = all(float(x).is_integer() for x in nums) and len(set(nums)) <= 6 and max(nums) - min(nums) <= 10
+        codes = all(float(x).is_integer() for x in nums) and len(set(nums)) <= 6 and min(nums) >= 0 and max(nums) <= 10
         return "category" if codes else "numeric"
     if sum(1 for v in present if ISO_DATE.match(str(v))) >= 0.9 * len(present):
         return "date"
@@ -387,7 +393,8 @@ def choose_genome(setting, maxpos, warnings):
                         "as its length")
         return "from-data", chroms
     if name is None and not present:
-        name = "hg38"  # no genomic rows at all: nothing to guess, nothing to warn about
+        # no genomic rows at all: nothing to guess, nothing to warn about, nothing to show
+        return None, [[c, l] for c, l in zip(HUMAN_CHROMS, GENOMES["hg38"]) if c != "Y"]
     if name is None:
         fits = []
         for build in ("hg38", "hg19", "chm13"):
@@ -398,6 +405,9 @@ def choose_genome(setting, maxpos, warnings):
         if len(fits) != 1:
             warnings.append("genome build not given; positions fit %s - assumed %s (set \"genome\" in the mapping "
                             "to be explicit)" % (", ".join(fits) or "no human build", name))
+        else:
+            warnings.append("genome build not given; inferred %s from the coordinates (set \"genome\" in the "
+                            "mapping to be explicit)" % name)
     lens = GENOMES[name]
     chroms = [[c, l] for c, l in zip(HUMAN_CHROMS, lens) if c != "Y" or "Y" in present]
     over = [c for c in human if maxpos[c] > dict(chroms).get(c, 0) * 1.0005]
@@ -471,7 +481,7 @@ def ascat_metrics(segs):
 def consistency_warnings(out_patients, segs_by):
     """Cross-checks between mapped values and the segments; each points at a likely mapping problem."""
     warns = []
-    ploidy_off, male_x, borderline, overlap = [], [], [], []
+    ploidy_off, male_x, borderline, overlap, no_sex = [], [], [], [], []
     for p in out_patients:
         segs = segs_by.get(p["id"], [])
         m = p["metrics"]
@@ -483,6 +493,8 @@ def consistency_warnings(out_patients, segs_by):
             borderline.append(p["id"])
         if not segs:
             continue
+        if p["sex"] not in ("XX", "XY") and any(s["chrom"] in SEX_CHROMS for s in segs):
+            no_sex.append(p["id"])
         tot = [(s["end"] - s["start"] + 1, s["total"]) for s in segs if s["chrom"] == "X" and s["total"] is not None]
         if p["sex"] == "XY" and tot:
             x_mean = sum(L * c for L, c in tot) / float(sum(L for L, _ in tot))
@@ -509,6 +521,11 @@ def consistency_warnings(out_patients, segs_by):
         warns.append("WGD call is borderline for %d patient(s) (the two most common major-allele states cover almost "
                      "the same share of the genome): %s. Treat their WGD / GI values with care."
                      % (len(borderline), ", ".join(borderline[:8])))
+    if no_sex:
+        warns.append("sex is unknown for %d patient(s) with chrX/chrY segments (%s): X and Y are left out of the "
+                     "gain/loss calls (heatmap, frequency plot, summary) instead of showing male X/Y as 'loss'. Map "
+                     "'sex' to include them, if the CN caller adjusted X for sex."
+                     % (len(no_sex), ", ".join(no_sex[:6]) + (" ..." if len(no_sex) > 6 else "")))
     if overlap:
         warns.append("copy-number segments overlap within %d patient(s): %s. Usually two CN sources were mapped to the "
                      "same patient; keep one segments table per patient." % (len(overlap), ", ".join(overlap[:8])))
@@ -527,9 +544,10 @@ def build(mapping, base):
     sources = []
     sv_extra_names = []
     for ti, spec in enumerate(tables):
-        kind, rows, srcs, extra = load_table_spec(spec, base, ti)
+        kind, rows, srcs, extra, notes = load_table_spec(spec, base, ti)
         loaded[kind].append((ti, rows, spec))
         sources += srcs
+        warnings += notes
         if extra and not sv_extra_names:
             sv_extra_names = extra
         elif extra and extra != sv_extra_names:
@@ -611,6 +629,7 @@ def build(mapping, base):
 
     segs_by = defaultdict(list)
     seg_missing = 0
+    seg_swapped = []
     for ti, rows, spec in loaded["segments"]:
         for rec in rows:
             pid, c = pid_of(rec), norm_chrom(rec.get("chrom"))
@@ -621,6 +640,7 @@ def build(mapping, base):
             s, e = int(round(s)), int(round(e))
             if e < s:
                 s, e = e, s
+                seg_swapped.append("%s %s:%d-%d" % (pid, c, e, s))
             major, minor = rec.get("major_cn"), rec.get("minor_cn")
             majr, minr = rec.get("major_raw"), rec.get("minor_raw")
             total = rec.get("total_cn")
@@ -653,6 +673,10 @@ def build(mapping, base):
     if seg_missing:
         warnings.append("%d segment rows skipped (missing patient, chromosome, start/end or any copy-number value)"
                         % seg_missing)
+    if seg_swapped:
+        warnings.append("%d segment row(s) had end < start and were read with start and end swapped: %s. Check the "
+                        "source; this usually means mis-ordered columns or a broken export"
+                        % (len(seg_swapped), ", ".join(seg_swapped[:5])))
     lift_attrs(loaded["segments"])
 
     svs = []
@@ -717,6 +741,7 @@ def build(mapping, base):
 
     bins_by = defaultdict(list)
     bin_missing = 0
+    bin_tables = defaultdict(set)
     for ti, rows, spec in loaded["bins"]:
         for rec in rows:
             pid = pid_of(rec) or "sample"
@@ -732,10 +757,16 @@ def build(mapping, base):
                 bin_missing += 1
                 continue
             bins_by[pid].append((c, int(round(pos)), vals))
+            bin_tables[pid].add(ti)
             ensure(pid)["sources"].add("bins")
             track_pos(c, int(round(pos)))
     if bin_missing:
         warnings.append("%d bin rows skipped (missing chromosome/position or all values empty)" % bin_missing)
+    multi = sorted((pid for pid, ts in bin_tables.items() if len(ts) > 1), key=natural_key)
+    if multi:
+        warnings.append("bins for %d patient(s) come from more than one table (%s); their points are drawn together "
+                        "in the same tracks. Keep one bins source per patient unless that is intended"
+                        % (len(multi), ", ".join(multi[:8])))
     lift_attrs(loaded["bins"])
 
     if not patients:
@@ -937,9 +968,12 @@ def baseline_cn(p):
 
 
 def base_for_chrom(base, chrom, sex):
-    # one X (and one Y) is the normal state in males
-    if sex == "XY" and chrom in SEX_CHROMS:
-        return max(1, int(math.floor(base / 2.0 + 0.5)))
+    """Baseline for gain/loss calls; None = do not call (sex chromosome, sex unknown)."""
+    if chrom in SEX_CHROMS:
+        if sex == "XY":  # one X (and one Y) is the normal state in males
+            return max(1, int(math.floor(base / 2.0 + 0.5)))
+        if sex != "XX":
+            return None  # mixed-sex cohorts would otherwise show male X/Y as "loss"
     return base
 
 
@@ -983,6 +1017,8 @@ def summarize(data):
             if tot is None:
                 continue
             b = base_for_chrom(base, chroms[ci][0], p["sex"])
+            if b is None:
+                continue
             L = en - st + 1
             cov[ci][2] += L
             if tot > b:
@@ -999,8 +1035,8 @@ def summarize(data):
             items = sorted(counter.items(), key=lambda kv: (-kv[1], kv[0]))
             return [["chr" + chroms[ci][0], r4(n / nseg)] for ci, n in items if n / nseg >= 0.1][:12]
         s["gain_loss_rule"] = ("share of the %d patients with segments where more than half of the chromosome has "
-                               "total CN above (gain) / below (loss) round(ploidy); male X/Y baseline halved; "
-                               "listed when >= 10%%" % nseg)
+                               "total CN above (gain) / below (loss) round(ploidy); male X/Y baseline halved; X/Y "
+                               "not called when sex is unknown; listed when >= 10%%" % nseg)
         s["chromosome_gains"] = ranked(gain)
         s["chromosome_losses"] = ranked(loss)
     if data["svs"]:

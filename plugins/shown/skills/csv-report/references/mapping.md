@@ -71,6 +71,7 @@ Notes:
   The builder warns when a mapped ploidy is more than 0.5 away from that.
 - `sex` = XY halves the X/Y baseline. The builder warns when chrX in a male is
   at the autosomal level, which means the caller did not adjust X for sex.
+  Patients without a known sex (XX/XY) have X/Y left out of gain/loss calls.
 - `variants`: up to 12 unmapped columns are kept as extra columns in the SV
   table. Use `exclude` to drop the uninteresting ones.
 
@@ -116,8 +117,9 @@ Category values are shown as they appear in the data.
 ```
 
 When `type` is omitted it is inferred:
-- numbers -> `numeric`, except small integer codes (at most 6 distinct
-  values within a range of 10, e.g. 0/1 flags or grades 1-4) -> `category`
+- numbers -> `numeric`, except small integer codes (at most 6 distinct values,
+  all between 0 and 10, e.g. 0/1 flags or grades 1-4) -> `category`. Scores
+  like HRD 32-42 stay numeric.
 - ISO dates -> `date` (Excel date cells are converted)
 - few distinct strings -> `category`
 - anything else -> `text`

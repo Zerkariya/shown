@@ -34,8 +34,11 @@ contains this SKILL.md. Below, `$SKILL` stands for that directory. Only
    python3 "$SKILL/scripts/profile_table.py" data/*.csv data/*.xlsx
    ```
    Every sheet of an .xlsx is profiled. The header row is auto-detected (title
-   rows above it are skipped); override with `--header-row N`. Read the hints,
-   but judge from the values: hints are heuristics.
+   rows above it are skipped); override with `--header-row N`. Note rows at
+   the end of a table ("End of sheet …", "注：…") are dropped, and decimal
+   commas (`0,55`) are read as decimal points. The profile lists both as
+   `note:` lines. Read the hints, but judge from the values: hints are
+   heuristics.
 
 3. **Decide what each table is and write `mapping.json`.** The full schema with
    examples is in `references/mapping.md`; read it the first time. Each input
@@ -79,7 +82,9 @@ contains this SKILL.md. Below, `$SKILL` stands for that directory. Only
        leave it unmapped and it is derived from the segments.
      - map `sex` only if the CN caller adjusted chrX for sex (ASCAT does).
        Otherwise males show a false X gain.
-     - The builder warns about both cases; take those warnings seriously.
+     - with `sex` unmapped, X and Y are not called at all; they show as no
+       data instead of a false male "loss". The builder says so.
+     - The builder warns about all of these; take those warnings seriously.
    - **One copy-number source per patient.** If two tables give segments for
      the same patients (e.g. CNVkit and ASCAT), map the one the user cares
      about, or ask. Overlapping segments trigger a warning.

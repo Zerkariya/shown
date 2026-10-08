@@ -31,10 +31,10 @@ ISO_DATE = re.compile(r"^\d{4}[-/.]\d{1,2}[-/.]\d{1,2}([ T]\d{1,2}:\d{2}(:\d{2})
 
 # (role, name regex) - matched case-insensitively against the column name.
 NAME_HINTS = [
-    ("patient", r"patient|^pt|case|subject|sample|^id$|_id$|barcode|编号|患者|病人|病例|样本|样品|受试者"),
+    ("patient", r"patient|^pt|^pid$|pid$|case|subject|sample|^id$|_id$|barcode|编号|患者|病人|病例|样本|样品|受试者"),
     ("chrom", r"^#?chr(om(osome)?)?$|^chrom|^chr_?1$|^seqnames?$|^contig$|染色体"),
     ("chrom2", r"chr2|chrom2|mate_?chr|partner_?chr|^chr_?b$"),
-    ("start", r"^start|startpos|^pos(ition)?$|^begin|^loc|起始|开始|位置|坐标"),
+    ("start", r"^start|startpos|^pos(ition)?([_.\s]|$)|^begin|^loc|起始|开始|位置|坐标"),
     ("end", r"^end|endpos|^stop|终止|结束|截止"),
     ("pos2", r"pos2|mate_?pos|partner_?pos"),
     ("major_cn", r"nmajor|^major|^n_?a$|^nA$|major_?cn|cn_?major|主等位"),
@@ -52,8 +52,8 @@ NAME_HINTS = [
     ("sr", r"^sr$|split|^rv$"),
     ("genotype", r"^gt$|genotype|基因型"),
     ("purity", r"purity|cellularity|^acf$|aberrant|tumou?r_?content|纯度|肿瘤含量"),
-    ("ploidy", r"ploidy|^psi$|倍性|倍体"),
-    ("goodness_of_fit", r"goodness|^gof|fit|拟合"),
+    ("ploidy", r"ploidy|^psi([_.\s]|$)|倍性|倍体"),
+    ("goodness_of_fit", r"goodness|^gof([_.\s]|$)|fit_?(quality|score|pct|percent)|拟合优度"),
     ("sex", r"^sex\b|gender|性别"),
 ]
 
@@ -95,7 +95,8 @@ def classify(values):
 def hints_for(name, typ, info, values):
     hints = []
     lname = name.lower()
-    if re.search(PII_RX, name, re.I) and not re.search(PII_EXEMPT, name, re.I):
+    if typ != "empty" and not re.match(r"^(unnamed|column_)", name, re.I) \
+            and re.search(PII_RX, name, re.I) and not re.search(PII_EXEMPT, name, re.I):
         return ["DIRECT IDENTIFIER? (name / MRN / phone / ID number ...) - exclude, never display"]
     for role, rx in NAME_HINTS:
         if re.search(rx, lname, re.I) or re.search(rx, name, re.I):
@@ -114,6 +115,9 @@ def hints_for(name, typ, info, values):
             hints.append("looks like VCF ALT")
         if re.match(r"^(DEL|DUP|INV|BND|INS|CNV)\d{5,}", present[0]):
             hints.append("Delly variant ID (type is the prefix)")
+        variant_ids = sum(1 for v in present[:500] if re.match(r"^(sv|del|dup|inv|bnd|ins|tra|cnv|manta|gridss|rs)[\w:.-]*\d", v, re.I))
+        if variant_ids >= 0.8 * min(len(present), 500):
+            hints = [h for h in hints if h != "patient"] + ["variant / record ID (not a patient ID)"]
         if all(re.match(r"^(chr)?\w+:\d[\d,]*(-\d[\d,]*)?$", v, re.I) for v in present[:200]):
             hints.append("combined locus chr:start-end (split with transforms.regex)")
         if all(re.match(r"^[0-9.][/|][0-9.]$", v) for v in present[:200]):
@@ -217,6 +221,10 @@ def print_profile(p):
         print("VCF samples:", ", ".join(p["meta"]["samples"]))
     for hint in p.get("layout_hints", []):
         print("layout: " + hint)
+    if p["meta"].get("decimal_comma_columns"):
+        print("note: decimal commas (0,55) converted to dots in: " + ", ".join(p["meta"]["decimal_comma_columns"]))
+    if p["meta"].get("footer_rows_dropped"):
+        print("note: dropped note row(s) at the end of the table: " + " | ".join(p["meta"]["footer_rows_dropped"])[:300])
     print("-" * 78)
     for c in p["column_profiles"]:
         print("%3d. %s  [%s]  missing=%d unique=%d" % (c["index"], c["name"], c["type"], c["missing"], c["unique"]))

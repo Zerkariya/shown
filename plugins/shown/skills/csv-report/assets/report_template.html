@@ -248,13 +248,14 @@ var I18N = {
     attr_list: "患者字段", field: "字段", label: "显示名", definitions: "指标定义", raw_mapping: "mapping.json 原文",
     kind_patients: "患者信息", kind_segments: "拷贝数片段", kind_variants: "结构变异", kind_bins: "Bin / SNP 数据",
     metrics: "指标", n_segs: "片段数", show_more: "显示更多", none: "无", borderline: "临界",
+    not_called: "未判断（性别未知）", show_all_attrs: "显示全部 {n} 个字段", show_fewer_attrs: "收起",
     def_purity: "肿瘤细胞比例（ASCAT 的 purity / aberrant cell fraction）。",
     def_ploidy: "平均拷贝数；如表中未提供，则按片段长度加权平均 nMajor+nMinor 推算。",
     def_wgd: "全基因组加倍：按 ascat.metrics，常染色体上主等位基因拷贝数众数为 1 → 0，2 → 1，3–5 → 1+。若第二常见的状态覆盖的基因组比例与众数相差不到 5%，标记为“临界”。",
     def_gi: "基因组不稳定性：常染色体上偏离 WGD 基线状态（1+1 或 2+2）的基因组比例（ascat.metrics 定义）。",
     def_loh: "杂合性缺失：常染色体上 nMinor = 0 的基因组比例。",
     def_fga: "基因组改变比例：常染色体上总拷贝数不等于其众数的比例（只有总拷贝数时也可计算）。",
-    def_state: "热图与频率图：总拷贝数 0 = 纯合缺失；低于 round(倍性) = 缺失；高于 = 扩增；超过 2×round(倍性) = 高度扩增。男性 X/Y 的基线减半。",
+    def_state: "热图与频率图：总拷贝数 0 = 纯合缺失；低于 round(倍性) = 缺失；高于 = 扩增；超过 2×round(倍性) = 高度扩增。男性 X/Y 的基线减半；性别未知时 X/Y 不做判断。",
     def_colors: "颜色沿用原工具：ASCAT 取整图谱 红 = nMajor、蓝 = nMinor；未取整 紫 = 总拷贝数、绿 = nMinor；Delly 读深图 绿线 = 分段。"
   },
   en: {
@@ -288,13 +289,14 @@ var I18N = {
     attr_list: "Patient fields", field: "Field", label: "Label", definitions: "Definitions", raw_mapping: "mapping.json",
     kind_patients: "Patient info", kind_segments: "CN segments", kind_variants: "Variants", kind_bins: "Bins / SNPs",
     metrics: "Metrics", n_segs: "Segments", show_more: "Show more", none: "none", borderline: "borderline",
+    not_called: "not called (sex unknown)", show_all_attrs: "Show all {n} fields", show_fewer_attrs: "Show fewer",
     def_purity: "Tumour cell fraction (ASCAT purity / aberrant cell fraction).",
     def_ploidy: "Average copy number; when not given, the length-weighted mean of nMajor+nMinor over segments.",
     def_wgd: "Whole-genome doubling as in ascat.metrics: autosomal mode of the major allele 1 -> 0, 2 -> 1, 3-5 -> 1+. Marked borderline when the runner-up state covers within 5% as much of the genome.",
     def_gi: "Genomic instability: autosomal fraction not at the WGD baseline state (1+1 or 2+2), as in ascat.metrics.",
     def_loh: "Loss of heterozygosity: autosomal fraction with nMinor = 0.",
     def_fga: "Fraction genome altered: autosomal fraction whose total CN differs from its mode (works with total CN only).",
-    def_state: "Heatmap and frequency plot: total CN 0 = homozygous deletion; below round(ploidy) = loss; above = gain; above 2 x round(ploidy) = amplification. Male X/Y baseline is halved.",
+    def_state: "Heatmap and frequency plot: total CN 0 = homozygous deletion; below round(ploidy) = loss; above = gain; above 2 x round(ploidy) = amplification. Male X/Y baseline is halved; X/Y are not called when sex is unknown.",
     def_colors: "Colours follow the original tools: ASCAT rounded profile red = nMajor, blue = nMinor; unrounded purple = total, green = nMinor; Delly read-depth plot green line = segments."
   }
 };
@@ -449,6 +451,7 @@ var GROUP = D.meta.group_by && ATTR_BY[D.meta.group_by] ? ATTR_BY[D.meta.group_b
 var HAS_SEG = P.some(function (p) { return p.has.segments; });
 var HAS_SV = D.svs.length > 0;
 var HAS_PP = P.some(function (p) { return p.purity != null && p.ploidy != null; });
+var HAS_GENOMIC = HAS_SEG || D.svs.length > 0 || Object.keys(D.bins).length > 0;
 var SVT = ["DEL", "DUP", "INV", "BND", "INS", "CNV", "OTHER"];
 var SV_NAMES = { DEL: "DEL", DUP: "DUP", INV: "INV", BND: "BND", INS: "INS", CNV: "CNV", OTHER: LANG === "en" ? "Other" : "其他" };
 setLocale();
@@ -484,14 +487,21 @@ if (GROUP) {
   if (GROUP.order) GROUP_CATS.sort(function (a, b) { return GROUP.order.indexOf(a) - GROUP.order.indexOf(b); });
   else GROUP_CATS.sort(function (a, b) { return gcount[b] - gcount[a] || naturalCmp(a, b); });
   GROUP_CATS.slice(0, 3).forEach(function (c, i) { GROUP_SLOTS[c] = "c" + (i + 1); });
+  // only three hues stay distinguishable in a scatter; a single fourth group gets the
+  // neutral grey under its own name, five or more fold into "Other"
+  if (GROUP_CATS.length === 4) GROUP_SLOTS[GROUP_CATS[3]] = "other";
 }
 function groupColor(v) { return v != null && GROUP_SLOTS[v] ? COLORS[GROUP_SLOTS[v]] : COLORS.other; }
 function groupLabel(v) { return v == null ? t("missing") : GROUP_SLOTS[v] ? v : t("other"); }
 
 function baseline(p) { return p.ploidy ? Math.max(1, Math.floor(p.ploidy + 0.5)) : 2; }
-function baseFor(base, ci, p) { return p.sex === "XY" && isSexChrom(ci) ? Math.max(1, Math.floor(base / 2 + 0.5)) : base; }
+function baseFor(base, ci, p) {
+  if (!isSexChrom(ci)) return base;
+  if (p.sex === "XY") return Math.max(1, Math.floor(base / 2 + 0.5));
+  return p.sex === "XX" ? base : null; // unknown sex: do not call X/Y gain or loss
+}
 function cnState(total, base) {
-  if (total == null) return null;
+  if (total == null || base == null) return null;
   var tt = Math.round(total);
   if (tt === 0) return -2;
   if (tt < base) return -1;
@@ -513,7 +523,8 @@ function segsOf(pid) {
   var allele = raw.every(function (s) { return s[3] != null && s[4] != null; });
   var hasRaw = raw.some(function (s) { return s[5] != null || s[8] != null; });
   var hasLogr = raw.some(function (s) { return s[9] != null; });
-  return (SEGC[pid] = { raw: raw, gs: gs, ge: ge, allele: allele, hasRaw: hasRaw, hasLogr: hasLogr });
+  var hasCN = raw.some(function (s) { return segTotal(s) != null; });
+  return (SEGC[pid] = { raw: raw, gs: gs, ge: ge, allele: allele, hasRaw: hasRaw, hasLogr: hasLogr, hasCN: hasCN });
 }
 function segAt(S, g) {
   var lo = 0, hi = S.gs.length - 1, ans = -1;
@@ -876,7 +887,23 @@ function renderOverview(root) {
     var ag = h("div", { class: "attr-grid" });
     ac.appendChild(ag);
     root.appendChild(ac);
-    ATTR.forEach(function (a) { attrCard(ag, a); });
+    var FIRST = 12;
+    ATTR.slice(0, FIRST).forEach(function (a) { attrCard(ag, a); });
+    if (ATTR.length > FIRST) {
+      var more = h("div", { class: "attr-grid", style: "margin-top:16px;display:none" });
+      ac.appendChild(more);
+      var drawn = false;
+      var btn = h("button", { class: "btn", type: "button", style: "margin-top:12px", "aria-expanded": "false",
+        text: t("show_all_attrs").replace("{n}", ATTR.length) });
+      btn.addEventListener("click", function () {
+        var open = more.style.display === "none";
+        more.style.display = open ? "" : "none";
+        btn.setAttribute("aria-expanded", open ? "true" : "false");
+        btn.textContent = open ? t("show_fewer_attrs") : t("show_all_attrs").replace("{n}", ATTR.length);
+        if (open && !drawn) { ATTR.slice(FIRST).forEach(function (a) { attrCard(more, a); }); drawn = true; }
+      });
+      ac.appendChild(btn);
+    }
   }
 
   var tc = card(t("patient_table"));
@@ -941,8 +968,8 @@ function scatterPP(c) {
   var pts = P.filter(function (p) { return p.purity != null && p.ploidy != null; });
   if (GROUP) {
     var items = [];
-    GROUP_CATS.slice(0, 3).forEach(function (g) { items.push({ label: g, color: groupColor(g), shape: "dot" }); });
-    if (GROUP_CATS.length > 3 || pts.some(function (p) { return p.attrs[GROUP.key] == null; }))
+    GROUP_CATS.slice(0, GROUP_CATS.length === 4 ? 4 : 3).forEach(function (g) { items.push({ label: g, color: groupColor(g), shape: "dot" }); });
+    if (GROUP_CATS.length > 4 || pts.some(function (p) { return p.attrs[GROUP.key] == null; }))
       items.push({ label: t("other"), color: COLORS.other, shape: "dot" });
     var lg = legend(items);
     lg.insertBefore(h("span", { style: "color:var(--muted)", text: lbl(GROUP) + ":" }), lg.firstChild);
@@ -1194,7 +1221,7 @@ function renderCN(root) {
         var s = S.raw[si], st = cnState(segTotal(s), baseFor(baseline(k.p), s[0], k.p));
         if (s[3] != null && s[4] != null) tipRows.push({ k: "nMajor + nMinor", v: s[3] + " + " + s[4] });
         tipRows.push({ k: t("total"), v: fmtNum(segTotal(s), 2) });
-        tipRows.push({ k: t("state"), v: t(STATE_KEYS[st]), color: stateColor(st) });
+        tipRows.push(st == null ? { k: t("state"), v: t("not_called") } : { k: t("state"), v: t(STATE_KEYS[st]), color: stateColor(st) });
         tipRows.push({ k: t("segment"), v: fmtBp(s[2] - s[1] + 1) });
       } else tipRows.push({ k: t("nodata"), v: "" });
     } else hcross.style.display = "none";
@@ -1540,8 +1567,8 @@ function buildTracks(container, p, S, B, svIdx, region, setRegion) {
     ctx.fillRect(xa, y - thick / 2, Math.max(1, xb - xa), thick);
   }
 
-  // 1. ASCAT profile
-  if (S) {
+  // 1. ASCAT profile (segments with copy numbers; logR-only segments go to the LogR track)
+  if (S && S.hasCN) {
     var raw = PV.mode === "raw" && S.allele && S.hasRaw;
     var leg = S.allele ? (raw ? [{ label: t("total_raw"), color: COLORS["ascat-total"] }, { label: t("minor_raw"), color: COLORS["ascat-rawminor"] }]
       : [{ label: t("major"), color: COLORS["ascat-major"] }, { label: t("minor"), color: COLORS["ascat-minor"] }])
@@ -1794,8 +1821,9 @@ function applyLang() {
   langBtn.setAttribute("aria-label", t("lang_aria"));
   themeBtn.textContent = t("theme_" + THEME);
   Array.prototype.forEach.call(tabsEl.querySelectorAll(".tab"), function (b) { b.textContent = t(b.getAttribute("data-key")); });
-  document.getElementById("metaline").textContent = [t("generated") + " " + D.meta.generated, t("genome") + " " + D.meta.genome,
-    fmtInt(P.length) + " " + t("patients")].join(" · ");
+  document.getElementById("metaline").textContent = [t("generated") + " " + D.meta.generated,
+    HAS_GENOMIC && D.meta.genome ? t("genome") + " " + D.meta.genome : null,
+    fmtInt(P.length) + " " + t("patients")].filter(Boolean).join(" · ");
 }
 langBtn.addEventListener("click", function () {
   LANG = LANG === "en" ? "zh" : "en";
