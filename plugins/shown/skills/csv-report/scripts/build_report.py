@@ -26,12 +26,13 @@ import re
 import sys
 from collections import Counter, OrderedDict, defaultdict
 
+sys.dont_write_bytecode = True  # keep the installed skill folder clean (no __pycache__)
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import tableio  # noqa: E402
 
 TEMPLATE = os.path.join(HERE, "..", "assets", "report_template.html")
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 
 GENOMES = {
     # 1..22, X, Y lengths; X/Y lengths for hg19/hg38/CHM13 (ASCAT ships 1..22,X for all three)
@@ -385,6 +386,8 @@ def choose_genome(setting, maxpos, warnings):
         warnings.append("chromosome names are not human (1-22, X, Y); using the largest coordinate per chromosome "
                         "as its length")
         return "from-data", chroms
+    if name is None and not present:
+        name = "hg38"  # no genomic rows at all: nothing to guess, nothing to warn about
     if name is None:
         fits = []
         for build in ("hg38", "hg19", "chm13"):
@@ -430,24 +433,28 @@ def ascat_metrics(segs):
     if not auto or not auto_bp:
         return out
 
-    def mode(vals):
+    def mode(vals, with_acc=False):
         acc = defaultdict(float)
         for v, s in vals:
             acc[min(5, int(round(v)))] += size(s) / 1e6
-        return max(sorted(acc), key=lambda k: acc[k])
+        best = max(sorted(acc), key=lambda k: acc[k])
+        return (best, acc) if with_acc else best
+
+    def wgd_of(mj):
+        return 0 if mj == 1 else 1 if mj == 2 else "1+" if mj in (3, 4, 5) else None
 
     if allele:
         out["LOH"] = round(sum(size(s) for s in auto if s["minor"] == 0) / auto_bp, 4)
         out["mode_minA"] = mode([(s["minor"], s) for s in auto])
-        mj = mode([(s["major"], s) for s in auto])
+        mj, acc = mode([(s["major"], s) for s in auto], with_acc=True)
         out["mode_majA"] = mj
-        wgd = None
-        if mj == 1:
-            wgd = 0
-        elif mj == 2:
-            wgd = 1
-        elif mj in (3, 4, 5):
-            wgd = "1+"
+        # the WGD call hangs on which major-allele state covers most of the genome;
+        # flag it when the runner-up state (with a different WGD call) is within 5%
+        total_mb = sum(acc.values())
+        for k in sorted(acc, key=lambda k: -acc[k])[1:2]:
+            if wgd_of(k) != wgd_of(mj) and total_mb and (acc[mj] - acc[k]) / total_mb < 0.05:
+                out["WGD_borderline"] = True
+        wgd = wgd_of(mj)
         out["WGD"] = wgd
         if wgd is not None:
             base = 1 if wgd == 0 else 2
@@ -459,6 +466,53 @@ def ascat_metrics(segs):
     base_tot = max(sorted(totals), key=lambda k: totals[k])
     out["FGA"] = round(1 - totals[base_tot] / auto_bp, 4)
     return out
+
+
+def consistency_warnings(out_patients, segs_by):
+    """Cross-checks between mapped values and the segments; each points at a likely mapping problem."""
+    warns = []
+    ploidy_off, male_x, borderline, overlap = [], [], [], []
+    for p in out_patients:
+        segs = segs_by.get(p["id"], [])
+        m = p["metrics"]
+        derived = m.get("ploidy_from_segments")
+        if p["ploidy_source"] == "input" and p["ploidy"] is not None and derived is not None \
+                and abs(p["ploidy"] - derived) > 0.5:
+            ploidy_off.append("%s (%.2f vs %.2f)" % (p["id"], p["ploidy"], derived))
+        if m.get("WGD_borderline"):
+            borderline.append(p["id"])
+        if not segs:
+            continue
+        tot = [(s["end"] - s["start"] + 1, s["total"]) for s in segs if s["chrom"] == "X" and s["total"] is not None]
+        if p["sex"] == "XY" and tot:
+            x_mean = sum(L * c for L, c in tot) / float(sum(L for L, _ in tot))
+            base = baseline_cn(p)
+            if x_mean >= 0.75 * base:
+                male_x.append("%s (chrX %.1f)" % (p["id"], x_mean))
+        last_end, n_over = {}, 0
+        for s in segs:
+            if s["start"] < last_end.get(s["chrom"], -1) - 1000:
+                n_over += 1
+            last_end[s["chrom"]] = max(last_end.get(s["chrom"], -1), s["end"])
+        if n_over:
+            overlap.append(p["id"])
+    if ploidy_off:
+        warns.append("mapped ploidy differs from the ploidy implied by the segments by more than 0.5 for %d patient(s): "
+                     "%s. Gain/loss calls use round(ploidy), so a wrong ploidy turns large parts of the genome into "
+                     "'gain' or 'loss'. Check that the ploidy column belongs to the same analysis as the segments, or "
+                     "leave ploidy unmapped to derive it from the segments." % (len(ploidy_off), ", ".join(ploidy_off[:6])))
+    if male_x:
+        warns.append("chrX is at the autosomal copy-number level in %d male (XY) patient(s): %s. Mapped sex halves the "
+                     "X/Y baseline for XY, so this shows as an X gain. Either the CN caller did not adjust X for sex, or "
+                     "the sex column is wrong; consider leaving 'sex' unmapped." % (len(male_x), ", ".join(male_x[:6])))
+    if borderline:
+        warns.append("WGD call is borderline for %d patient(s) (the two most common major-allele states cover almost "
+                     "the same share of the genome): %s. Treat their WGD / GI values with care."
+                     % (len(borderline), ", ".join(borderline[:8])))
+    if overlap:
+        warns.append("copy-number segments overlap within %d patient(s): %s. Usually two CN sources were mapped to the "
+                     "same patient; keep one segments table per patient." % (len(overlap), ", ".join(overlap[:8])))
+    return warns
 
 
 # --------------------------------------------------------------------------- #
@@ -568,14 +622,18 @@ def build(mapping, base):
             if e < s:
                 s, e = e, s
             major, minor = rec.get("major_cn"), rec.get("minor_cn")
-            if major is not None and minor is not None and minor > major:
-                major, minor = minor, major
             majr, minr = rec.get("major_raw"), rec.get("minor_raw")
-            if majr is not None and minr is not None and minr > majr:
-                majr, minr = minr, majr
             total = rec.get("total_cn")
             if total is None and major is not None and minor is not None:
                 total = major + minor
+            if major is None and minor is not None and total is not None:
+                major = total - minor  # e.g. FACETS tcn.em / lcn.em
+            if majr is None and minr is not None and rec.get("total_raw") is not None:
+                majr = rec["total_raw"] - minr
+            if major is not None and minor is not None and minor > major:
+                major, minor = minor, major
+            if majr is not None and minr is not None and minr > majr:
+                majr, minr = minr, majr
             total_raw = rec.get("total_raw")
             if total_raw is None and majr is not None and minr is not None:
                 total_raw = majr + minr
@@ -817,6 +875,7 @@ def build(mapping, base):
     if downsampled:
         warnings.append("bins down-sampled to %d points for %d patient(s) to keep the HTML light"
                         % (max_points, len(downsampled)))
+    warnings += consistency_warnings(out_patients, segs_by)
 
     sv_rows = []
     for s in svs:
@@ -906,6 +965,7 @@ def summarize(data):
     wgd = [p["metrics"].get("WGD") for p in pts if "WGD" in p["metrics"]]
     if wgd:
         s["WGD_fraction"] = r4(sum(1 for w in wgd if w not in (0, None)) / len(wgd))
+        s["WGD_borderline"] = sum(1 for p in pts if p["metrics"].get("WGD_borderline"))
     for k in ("GI", "LOH", "FGA"):
         vals = [p["metrics"].get(k) for p in pts if p["metrics"].get(k) is not None]
         if vals:
@@ -935,8 +995,14 @@ def summarize(data):
             if t and l / t > 0.5:
                 loss[ci] += 1
     if nseg:
-        s["chromosome_gains"] = [["chr" + chroms[ci][0], r4(n / nseg)] for ci, n in gain.most_common(6)]
-        s["chromosome_losses"] = [["chr" + chroms[ci][0], r4(n / nseg)] for ci, n in loss.most_common(6)]
+        def ranked(counter):
+            items = sorted(counter.items(), key=lambda kv: (-kv[1], kv[0]))
+            return [["chr" + chroms[ci][0], r4(n / nseg)] for ci, n in items if n / nseg >= 0.1][:12]
+        s["gain_loss_rule"] = ("share of the %d patients with segments where more than half of the chromosome has "
+                               "total CN above (gain) / below (loss) round(ploidy); male X/Y baseline halved; "
+                               "listed when >= 10%%" % nseg)
+        s["chromosome_gains"] = ranked(gain)
+        s["chromosome_losses"] = ranked(loss)
     if data["svs"]:
         types = Counter(r[6] for r in data["svs"])
         s["sv_total"] = len(data["svs"])
@@ -995,6 +1061,8 @@ def main(argv=None):
         print("warnings:")
         for w in data["meta"]["warnings"]:
             print("  - " + w)
+    else:
+        print("warnings: none")
     if args.stats_json:
         with open(args.stats_json, "w", encoding="utf-8") as fh:
             json.dump(summary, fh, ensure_ascii=False, indent=1)

@@ -72,6 +72,49 @@ The agent then:
 
 Keep `mapping.json`; when the data is updated you can rebuild with it directly.
 
+### Writing the prompt
+
+A one-liner works, and the agent asks when something is ambiguous. Each of
+these lines saves a round trip, most useful first:
+
+```text
+Use the csv-report skill to turn these into a visual report:
+- files: data/clinical.xlsx, data/ascat/*.segments.txt, data/delly_sv.csv
+- what they are: clinical sheet; ASCAT segments (one file per sample); Delly SVs (bcftools query export)
+- genome: hg38
+- patient ID: "Sample" in the clinical sheet, the sample column in the ASCAT files, "SAMPLE" in the Delly table
+- colour groups by "Histology"
+- leave out: patient names, MRN, phone numbers
+- title "XX cohort copy-number report", with a Chinese version
+- write it to report/ and tell me how you mapped each file and what you assumed
+```
+
+### What input works
+
+Column names, column order and the number of columns are free. What matters
+is what one row stands for:
+
+| to get | one row is | needs at least | nice to have |
+|---|---|---|---|
+| cohort overview | a patient | patient ID | any clinical / analysis columns (each gets a chart) |
+| purity vs ploidy | a patient | patient ID, purity, ploidy | goodness of fit |
+| ASCAT profile, CN heatmap | a CN segment | patient ID, chromosome, start, end, copy number | nMajor/nMinor, unrounded values, logR |
+| SV charts | an SV | chromosome, position (+ patient ID) | end / second breakpoint, type, FILTER, read support |
+| LogR / BAF / depth tracks | a bin or SNP | chromosome, position | logR, BAF, CN estimate |
+
+Rules that do matter:
+- **Header:** one header row. Title rows above it are fine; merged or
+  multi-row headers are not.
+- **IDs:** the same patient ID across files, or derivable from file names.
+- **Coordinates:** all on one genome build.
+- **Formats:** CSV / TSV / TXT / `.xlsx` / text VCF, optionally gzipped.
+  - Convert `.xls` to `.xlsx` first.
+  - Convert BCF with `bcftools view` first.
+- **Other shapes** (one column per sample or per chromosome arm, gene-level
+  tables) go through a small conversion script the agent writes.
+- **Not drawn as dedicated charts yet:** gene-level results (expression,
+  MAF mutations, enrichment) and survival curves.
+
 ### Run it by hand (no AI)
 
 ```bash

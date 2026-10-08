@@ -60,13 +60,29 @@ contains this SKILL.md. Below, `$SKILL` stands for that directory. Only
      "wide" export), list them in that table's `attributes`. They are lifted to
      the patient.
    - Fix units with `transforms`:
-     - purity given in percent: `{"op": "divide", "value": 100}`
+     - purity given in percent: `{"op": "divide", "value": 100}`. Optional:
+       the builder also divides by 100 when purity is still above 1.5 after
+       your transforms, so it never divides twice.
      - positions given in Mb: `multiply` by 1e6
      - a combined `"2+1"` CN cell or a `chr1:100-200` locus: `regex` with a
        `group` (the same source column can feed two fields)
      - ratios that should be logR: `log2`
    - Chromosome spelling (`chr1`, `1`, `23`, `chrX`) and SV type synonyms
-     (`deletion`, `TRA`, `<DEL>`, `缺失`) are normalized automatically.
+     (`deletion`, `TRA`, `tandem_dup`, `<DEL>`, `缺失`) are normalized
+     automatically.
+   - **`ploidy` and `sex` change the copy-number calls.** Gain / loss / amp in
+     the heatmap, frequency plot and summary are relative to round(ploidy);
+     mapped `sex` = XY halves that baseline on X/Y. So:
+     - map `ploidy` only from the same analysis as the segments (e.g. ASCAT's
+       own ploidy). A ploidy from another pipeline that disagrees with the
+       segments makes most of the genome look gained or lost. When in doubt,
+       leave it unmapped and it is derived from the segments.
+     - map `sex` only if the CN caller adjusted chrX for sex (ASCAT does).
+       Otherwise males show a false X gain.
+     - The builder warns about both cases; take those warnings seriously.
+   - **One copy-number source per patient.** If two tables give segments for
+     the same patients (e.g. CNVkit and ASCAT), map the one the user cares
+     about, or ask. Overlapping segments trigger a warning.
    - Set `genome` (`hg19` / `hg38` / `chm13`) when you can tell; otherwise the
      builder infers it from coordinates and warns.
    - Set `group_by` to the clinical attribute that best splits the cohort (2-6
@@ -79,30 +95,43 @@ contains this SKILL.md. Below, `$SKILL` stands for that directory. Only
      - Set `"language": "zh"` only when the user wants Chinese as the default
        view.
    - **Privacy:** never display direct identifiers (patient names, national ID
-     or phone numbers, addresses, MRNs) as attributes. Put them in `exclude` /
-     `hide_attributes`, unless the user explicitly asks for them. Tell the user
-     which columns you left out.
+     or phone numbers, addresses, MRNs) as attributes, and never use a name
+     column as the patient ID. The profiler marks such columns
+     `DIRECT IDENTIFIER?`. Put them in `exclude` / `hide_attributes`, unless
+     the user explicitly asks for them. Tell the user which columns you left
+     out.
    - If a mapping decision would change the result and the data cannot settle
      it, ask one short question. Example: two candidate ID columns that
      disagree.
 
-   `references/formats.md` describes the native Delly and ASCAT outputs and
-   their ready-made mappings.
+   `references/formats.md` describes the native Delly, ASCAT and CNVkit outputs
+   and their ready-made mappings.
 
 4. **Validate and iterate:**
    ```bash
    python3 "$SKILL/scripts/build_report.py" report/mapping.json --check
    ```
    Errors name the problem and suggest close column names. Fix the mapping and
-   re-run until it passes. Then read the printed `warnings` (dropped rows,
-   unknown contigs, percent purity, genome guess, patients missing from a table)
-   and fix what is fixable.
+   re-run until it passes. Then read the printed `warnings` and fix what is
+   fixable. It always prints either a list or `warnings: none`. Warnings cover:
+   - dropped rows and unknown contigs
+   - percent purity and the genome guess
+   - patients missing from a table
+   - ploidy or sex contradicting the segments
+   - borderline WGD calls
+   - overlapping segments
+
+   Add `--stats-json report/summary.json` to keep the summary as a file.
 
 5. **Optional: insights.** From the printed `summary` only, write 3-6 short,
-   factual observations into `"insights"` (e.g. "8q gain in 43% of patients;
-   WGD in 55%"), with the same points in Chinese in `"insights_zh"`. Do not
-   speculate beyond the numbers and give no clinical advice. The report labels
-   them as AI-written.
+   factual observations into `"insights"` (e.g. "chr8 gain in 43% of
+   patients; WGD in 55%"), with the same points in Chinese in
+   `"insights_zh"`. Do not speculate beyond the numbers and give no clinical
+   advice; the report labels them as AI-written.
+   - `gain_loss_rule` in the summary states exactly what `chromosome_gains` /
+     `chromosome_losses` measure. Reuse its wording rather than saying "arm"
+     or "focal".
+   - Mention it when `WGD_borderline` is above 0.
 
 6. **Build:**
    ```bash
@@ -123,9 +152,24 @@ If a table cannot be expressed as one of the four kinds, write a small
 preprocessing script in the output folder that produces a tidy CSV, then map
 that CSV. Keep the script next to the report so the result can be reproduced.
 Examples:
-- one column per chromosome arm
 - CN encoded in a sheet layout
 - several patients side by side in column blocks
+- one column per chromosome arm (see below)
+
+**Arm-level or other relative calls** (one row per patient, columns like
+`1p 1q 2p …`, values −1/0/+1 or loss/neutral/gain; the profiler reports
+`layout: wide layout …`):
+- These are relative states, not copy numbers. Do not invent `total_cn`
+  from them.
+- Default: summarize them per patient (counts of gained / lost / altered arms,
+  plus the lists of arms) in a tidy CSV, and map it as an extra `patients`
+  table.
+- Draw them on the genome as segments only when no real segment table exists
+  and the user wants that. Arm boundaries need centromere positions for the
+  right genome build (e.g. the UCSC cytoBand file). Ask the user for that
+  file rather than guessing coordinates.
+- If segments for the same patients also exist, check whether the two
+  sources agree, and tell the user.
 
 ASCAT's `Tumor_LogR.txt` / `Tumor_BAF.txt` (one column per sample) do **not**
 need this: add one `bins` entry per sample with `"patient": {"value": "S1"}` and

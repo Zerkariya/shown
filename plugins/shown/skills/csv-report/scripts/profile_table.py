@@ -20,6 +20,7 @@ import statistics
 import sys
 from collections import Counter
 
+sys.dont_write_bytecode = True  # keep the installed skill folder clean (no __pycache__)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import tableio  # noqa: E402
 
@@ -30,7 +31,7 @@ ISO_DATE = re.compile(r"^\d{4}[-/.]\d{1,2}[-/.]\d{1,2}([ T]\d{1,2}:\d{2}(:\d{2})
 
 # (role, name regex) - matched case-insensitively against the column name.
 NAME_HINTS = [
-    ("patient", r"patient|^pt|case|subject|sample|^id$|_id$|^name$|barcode|编号|患者|病人|病例|样本|样品|姓名|受试者"),
+    ("patient", r"patient|^pt|case|subject|sample|^id$|_id$|barcode|编号|患者|病人|病例|样本|样品|受试者"),
     ("chrom", r"^#?chr(om(osome)?)?$|^chrom|^chr_?1$|^seqnames?$|^contig$|染色体"),
     ("chrom2", r"chr2|chrom2|mate_?chr|partner_?chr|^chr_?b$"),
     ("start", r"^start|startpos|^pos(ition)?$|^begin|^loc|起始|开始|位置|坐标"),
@@ -53,8 +54,15 @@ NAME_HINTS = [
     ("purity", r"purity|cellularity|^acf$|aberrant|tumou?r_?content|纯度|肿瘤含量"),
     ("ploidy", r"ploidy|^psi$|倍性|倍体"),
     ("goodness_of_fit", r"goodness|^gof|fit|拟合"),
-    ("sex", r"^sex$|gender|性别"),
+    ("sex", r"^sex\b|gender|性别"),
 ]
+
+
+# direct identifiers: never show as attributes (SKILL.md privacy rule)
+PII_RX = (r"name|姓名|名字|^mrn$|medical.?record|病历号|住院号|门诊号|phone|mobile|\btel\b|电话|手机|"
+          r"身份证|id.?card|national.?id|passport|^ssn$|address|地址|住址|e-?mail|邮箱|birth.?date|^dob$|出生日期")
+PII_EXEMPT = r"gene|sample|file|drug|cancer|disease|tumou?r|histolog|variant|chrom|cell|pathway|signature"
+ARM_RX = re.compile(r"^(chr)?(\d{1,2}|X|Y)[pq](_.*)?$", re.I)
 
 
 def classify(values):
@@ -87,6 +95,8 @@ def classify(values):
 def hints_for(name, typ, info, values):
     hints = []
     lname = name.lower()
+    if re.search(PII_RX, name, re.I) and not re.search(PII_EXEMPT, name, re.I):
+        return ["DIRECT IDENTIFIER? (name / MRN / phone / ID number ...) - exclude, never display"]
     for role, rx in NAME_HINTS:
         if re.search(rx, lname, re.I) or re.search(rx, name, re.I):
             hints.append(role)
@@ -118,8 +128,10 @@ def hints_for(name, typ, info, values):
             hints.append("fraction 0-1 (purity/BAF/frequency?)")
         if 1 < mx <= 100 and mn >= 0 and ("purity" in hints or info.get("percent_sign")):
             hints.append("percent 0-100 (divide by 100 for purity)")
-        if -6 <= mn and mx <= 6 and mn < 0:
+        if typ == "float" and -6 <= mn and mx <= 6 and mn < 0:
             hints.append("signed small values (logR?)")
+        if typ == "integer" and mn >= -2 and mx <= 2 and mn < 0:
+            hints.append("relative call -1/0/+1 (loss/neutral/gain), not a copy number")
     if info["unique"] == len(values) - info["missing"] and len(values) > 1 and typ in ("text", "category", "integer"):
         hints.append("unique per row")
     return hints
@@ -180,8 +192,13 @@ def profile(table, max_values=8):
         if g:
             grouping = g
             break
+    layout = []
+    arm_cols = [c for c in table.columns if ARM_RX.match(c)]
+    if len(arm_cols) >= 10:
+        layout.append("wide layout: %d columns are chromosome arms (%s ...) - one row per patient, one column per arm; "
+                      "see SKILL.md 'When the shape does not fit'" % (len(arm_cols), ", ".join(arm_cols[:4])))
     return {
-        "file": table.path, "sheet": table.sheet, "format": table.format,
+        "file": table.path, "sheet": table.sheet, "format": table.format, "layout_hints": layout,
         "header_row": table.header_row, "skipped_rows_above_header": table.skipped_rows,
         "rows": len(table.rows), "columns": len(table.columns), "column_profiles": cols,
         "grouping": grouping, "meta": table.meta,
@@ -198,6 +215,8 @@ def print_profile(p):
         "   (skipped %d row(s) above header)" % p["skipped_rows_above_header"] if p["skipped_rows_above_header"] else ""))
     if p["meta"].get("samples"):
         print("VCF samples:", ", ".join(p["meta"]["samples"]))
+    for hint in p.get("layout_hints", []):
+        print("layout: " + hint)
     print("-" * 78)
     for c in p["column_profiles"]:
         print("%3d. %s  [%s]  missing=%d unique=%d" % (c["index"], c["name"], c["type"], c["missing"], c["unique"]))

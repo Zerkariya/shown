@@ -46,7 +46,7 @@ A `columns` value is either a column name, or an object:
 
 | kind | required | optional |
 |---|---|---|
-| patients | `patient` | `purity` (0-1; percent is auto-detected and divided), `ploidy`, `goodness_of_fit` (%), `sex` (XX/XY/男/女/M/F) |
+| patients | `patient` | `purity` (0-1; values still above 1.5 after transforms are divided by 100, so a `divide` transform is optional and never applied twice), `ploidy`, `goodness_of_fit` (%), `sex` (XX/XY/男/女/M/F) |
 | segments | `patient chrom start end` | `major_cn minor_cn` (integers, ASCAT nMajor/nMinor), `total_cn`, `major_raw minor_raw` (ASCAT nAraw/nBraw), `total_raw` (e.g. Delly float CN), `logr` (segment mean), `baf`, `n_markers` |
 | variants | `chrom pos` | `patient end chrom2 pos2 svtype svlen qual filter pe sr genotype id precise alt cn` |
 | bins | `chrom` and `pos` or `start` (+`end` -> midpoint) | `patient logr baf cn` |
@@ -60,6 +60,19 @@ Notes:
 - `filter`: `PASS` drives the "PASS only" toggle in the report.
 - `variants` without a `patient` column are assigned to patient `sample`.
   Give `patient` a `value` instead.
+- `patients` tables:
+  - A mapped `sex` column is still shown as an attribute; purity, ploidy and
+    goodness of fit are shown in their own places instead.
+  - Several `patients` tables are merged by `patient`. For each field and
+    attribute, the first non-empty value wins, in table order. A patient
+    listed twice in the same table keeps its first row (with a warning).
+- `ploidy` sets the gain/loss baseline (round(ploidy)). Leave it unmapped to
+  derive it from the segments (length-weighted mean of the total CN).
+  The builder warns when a mapped ploidy is more than 0.5 away from that.
+- `sex` = XY halves the X/Y baseline. The builder warns when chrX in a male is
+  at the autosomal level, which means the caller did not adjust X for sex.
+- `variants`: up to 12 unmapped columns are kept as extra columns in the SV
+  table. Use `exclude` to drop the uninteresting ones.
 
 ## transforms
 

@@ -11,10 +11,13 @@ from __future__ import annotations
 import gzip
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
+
+sys.dont_write_bytecode = True  # importing the scripts must not litter the skill folder
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCRIPTS = os.path.join(ROOT, "plugins", "shown", "skills", "csv-report", "scripts")
@@ -224,6 +227,89 @@ class BuildTests(FixtureMixin, unittest.TestCase):
         r = run([os.path.join(SCRIPTS, "build_report.py"), os.path.join(ROOT, "examples", "mapping.json"), "--check"])
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn("patients: 40", r.stdout)
+
+
+class ConsistencyTests(FixtureMixin, unittest.TestCase):
+    """Warnings that point at likely mapping mistakes (found by a blind test with CNVkit-style data)."""
+
+    def segs(self, rows):
+        return self.write("s.csv", "id,chr,s,e,maj,min\n" + "".join("%s,%s,%d,%d,%d,%d\n" % r for r in rows))
+
+    def build_with(self, patients_csv, cols, seg_rows):
+        self.write("p.csv", patients_csv)
+        self.segs(seg_rows)
+        m = self.mapping({"genome": "hg19", "tables": [
+            {"file": "p.csv", "kind": "patients", "columns": cols},
+            {"file": "s.csv", "kind": "segments", "columns": {"patient": "id", "chrom": "chr", "start": "s", "end": "e",
+                                                               "major_cn": "maj", "minor_cn": "min"}}]})
+        return build_report.build(self.load(m), self.d)
+
+    def test_ploidy_contradicting_segments(self):
+        diploid = [("A", "1", 1, 249000000, 1, 1), ("A", "2", 1, 243000000, 1, 1)]
+        data = self.build_with("id,ploidy\nA,3.9\n", {"patient": "id", "ploidy": "ploidy"}, diploid)
+        self.assertTrue(any("mapped ploidy differs" in w for w in data["meta"]["warnings"]))
+        data = self.build_with("id,ploidy\nA,2.0\n", {"patient": "id", "ploidy": "ploidy"}, diploid)
+        self.assertFalse(any("mapped ploidy differs" in w for w in data["meta"]["warnings"]))
+
+    def test_male_x_at_autosomal_level(self):
+        rows = [("A", "1", 1, 249000000, 1, 1), ("A", "X", 1, 155000000, 1, 1)]
+        data = self.build_with("id,sex\nA,M\n", {"patient": "id", "sex": "sex"}, rows)
+        self.assertTrue(any("chrX is at the autosomal" in w for w in data["meta"]["warnings"]))
+        rows = [("A", "1", 1, 249000000, 1, 1), ("A", "X", 1, 155000000, 1, 0)]
+        data = self.build_with("id,sex\nA,M\n", {"patient": "id", "sex": "sex"}, rows)
+        self.assertFalse(any("chrX is at the autosomal" in w for w in data["meta"]["warnings"]))
+
+    def test_borderline_wgd(self):
+        # 2+0 (WGD state) covers barely more than 1+1 -> borderline
+        rows = [("A", "1", 1, 125000000, 2, 0), ("A", "1", 125000001, 249000000, 1, 1),
+                ("A", "2", 1, 121000000, 1, 1), ("A", "2", 121000001, 243000000, 2, 0)]
+        data = self.build_with("id\nA\n", {"patient": "id"}, rows)
+        self.assertTrue(data["patients"][0]["metrics"].get("WGD_borderline"))
+        self.assertTrue(any("borderline" in w for w in data["meta"]["warnings"]))
+
+    def test_overlapping_sources(self):
+        rows = [("A", "1", 1, 249000000, 1, 1), ("A", "1", 1000000, 50000000, 2, 1)]
+        data = self.build_with("id\nA\n", {"patient": "id"}, rows)
+        self.assertTrue(any("segments overlap" in w for w in data["meta"]["warnings"]))
+
+    def test_facets_total_and_minor_only(self):
+        self.write("f.tsv", "ID\tchrom\tstart\tend\ttcn.em\tlcn.em\nA\t23\t1\t1000000\t3\t1\nA\t1\t1\t2000000\t2\tNA\n")
+        m = self.mapping({"genome": "hg19", "tables": [{"file": "f.tsv", "kind": "segments", "columns": {
+            "patient": "ID", "chrom": "chrom", "start": "start", "end": "end", "total_cn": "tcn.em", "minor_cn": "lcn.em"}}]})
+        data = build_report.build(self.load(m), self.d)
+        segs = data["segments"]["A"]
+        x = [s for s in segs if data["chroms"][s[0]][0] == "X"][0]
+        self.assertEqual((x[3], x[4], x[7]), (2, 1, 3))
+        one = [s for s in segs if data["chroms"][s[0]][0] == "1"][0]
+        self.assertEqual((one[3], one[4], one[7]), (None, None, 2))
+
+
+class ProfileHintTests(FixtureMixin, unittest.TestCase):
+    def test_identifiers_and_arm_layout(self):
+        arms = ["%d%s" % (c, a) for c in range(1, 8) for a in "pq"]
+        p = self.write("arm.csv", "Sample,Patient name,MRN," + ",".join(arms) + "\n"
+                       + "S1,Ann,M1," + ",".join("0" for _ in arms) + "\n"
+                       + "S2,Bob,M2," + ",".join("-1" for _ in arms) + "\n"
+                       + "S3,Cy,M3," + ",".join("1" for _ in arms) + "\n")
+        prof = profile_table.profile(tableio.read_table(p))
+        hints = {c["name"]: c["hints"] for c in prof["column_profiles"]}
+        self.assertIn("patient", hints["Sample"])
+        self.assertTrue(hints["Patient name"][0].startswith("DIRECT IDENTIFIER"))
+        self.assertTrue(hints["MRN"][0].startswith("DIRECT IDENTIFIER"))
+        self.assertTrue(any("relative call" in h for h in hints["1p"]))
+        self.assertTrue(any("chromosome arms" in h for h in prof["layout_hints"]))
+
+    def test_scripts_do_not_write_bytecode(self):
+        cache = os.path.join(SCRIPTS, "__pycache__")
+        shutil.rmtree(cache, ignore_errors=True)
+        p = self.write("x.csv", "a,b\n1,2\n")
+        r = run([os.path.join(SCRIPTS, "profile_table.py"), p])
+        self.assertEqual(r.returncode, 0, r.stderr)
+        m = self.mapping({"tables": [{"file": "x.csv", "kind": "patients", "columns": {"patient": "a"}}]})
+        r = run([os.path.join(SCRIPTS, "build_report.py"), m, "--check"])
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("warnings: none", r.stdout)
+        self.assertFalse(os.path.exists(cache))
 
 
 if __name__ == "__main__":
