@@ -137,8 +137,9 @@ The mapping format is documented in [`references/mapping.md`](plugins/shown/skil
 
 - **Handled automatically:**
   - GBK and UTF-8 encodings
-  - title rows above the header in Excel
+  - title rows above the header and note rows below the table in Excel
   - Excel dates
+  - decimal commas (`0,55`)
   - chromosome spellings (`chr1`, `1`, `23`)
   - SV type synonyms (`deletion`, `TRA`, `<DEL>`, `缺失`)
   - purity written as a percentage

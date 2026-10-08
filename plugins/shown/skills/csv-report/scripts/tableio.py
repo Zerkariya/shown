@@ -175,7 +175,61 @@ def _finish(path, raw_rows, header_row, sheet, fmt, meta=None):
     if len(keep) != len(names):
         names = [names[i] for i in keep]
         rows = [[r[i] for i in keep] for r in rows]
+    # spreadsheet exports often end with a note line ("End of sheet", "注：...")
+    meta = dict(meta or {})
+    footer = []
+    while rows and len(footer) < 5 and len(names) >= 3:
+        cells = _nonempty(rows[-1])
+        if len(cells) == 1 and _looks_like_note(cells[0]):
+            footer.insert(0, cells[0])
+            rows.pop()
+        else:
+            break
+    if footer:
+        meta["footer_rows_dropped"] = footer
     return Table(path, names, rows, sheet=sheet, header_row=h_display, skipped_rows=skipped, fmt=fmt, meta=meta)
+
+
+_NOTE_START = re.compile(r"^(注|备注|说明|来源|数据来源|note|notes|source|end\b|total\b|\*|#)", re.I)
+
+
+def _looks_like_note(cell: str) -> bool:
+    cell = str(cell).strip()
+    return bool(_NOTE_START.match(cell) or (re.search(r"\s", cell) and len(cell) >= 12) or len(cell) >= 40)
+
+
+_DEC_COMMA = re.compile(r"^[+-]?\d+,\d+$")
+_THOUSANDS = re.compile(r"^[+-]?\d{1,3}(,\d{3})+$")
+
+
+def _fix_decimal_commas(t: "Table") -> None:
+    """European exports write 0,55 for 0.55. Convert such columns in place.
+
+    A column is converted when every value is a number, none uses '.', and at
+    least one value cannot be a thousands separator (e.g. 0,0093 or 12,5).
+    Values like 1,234 alone stay thousands-separated unless the same file
+    already proved to use decimal commas and ',' is not the field delimiter.
+    """
+    cand, proven = [], False
+    for j in range(len(t.columns)):
+        vals = [r[j] for r in t.rows if not is_missing(r[j])]
+        if not vals or any("." in v for v in vals):
+            continue
+        dec = [v for v in vals if _DEC_COMMA.match(v)]
+        if not dec or not all(_DEC_COMMA.match(v) or _NUM_RE.match(v) for v in vals):
+            continue
+        unambiguous = any(not _THOUSANDS.match(v) for v in dec)
+        proven = proven or unambiguous
+        cand.append((j, unambiguous))
+    converted = []
+    for j, unambiguous in cand:
+        if unambiguous or (proven and t.meta.get("delimiter") != ","):
+            for r in t.rows:
+                if _DEC_COMMA.match(r[j]):
+                    r[j] = r[j].replace(",", ".")
+            converted.append(t.columns[j])
+    if converted:
+        t.meta["decimal_comma_columns"] = converted
 
 
 # --------------------------------------------------------------------------- #
@@ -208,6 +262,7 @@ def _read_delimited(path, header_row=None, delimiter=None):
     else:
         rows = list(csv.reader(lines, delimiter=delim))
     t = _finish(path, rows, header_row, None, "delimited", {"delimiter": delim})
+    _fix_decimal_commas(t)
     # ASCAT LogR/BAF files: first header cell is empty (row names column).
     if t.header_row and t.columns and t.columns[0] == "column_1" and t.rows and len(t.columns) > 2:
         t.columns[0] = "probe_id"

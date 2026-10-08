@@ -130,7 +130,7 @@ python3 $SKILL/scripts/build_report.py my_mapping.json -o report.html
 | `variants` | 一个 SV / CNV | Delly VCF（文本）、`bcftools query` 导出表，或任何 SV 列表 |
 | `bins` | 一个 bin / SNP | Delly `cov.gz`、ASCAT `Tumor_LogR.txt` / `Tumor_BAF.txt` |
 
-- **自动处理**：GBK / UTF-8 编码、Excel 表头上方的标题行、Excel 日期、`chr1` / `1` / `23` 这类染色体写法、`deletion` / `TRA` / `<DEL>` / `缺失` 这类 SV 类型写法、百分数形式的纯度、参考基因组版本推断（hg19 / hg38 / CHM13）
+- **自动处理**：GBK / UTF-8 编码、Excel 表头上方的标题行和表格下方的备注行、Excel 日期、逗号小数（`0,55`）、`chr1` / `1` / `23` 这类染色体写法、`deletion` / `TRA` / `<DEL>` / `缺失` 这类 SV 类型写法、百分数形式的纯度、参考基因组版本推断（hg19 / hg38 / CHM13）
 - **靠 AI 写的 `transforms` 处理**：以 Mb 为单位的位置、`"2+1"` 这种合在一格里的拷贝数等不规范写法
 
 ## 报告内容
