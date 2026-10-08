@@ -1,0 +1,1 @@
+Can you batch-plot CNVkit style segments and bin-level profiles? Check chromosome coverage. A sample name may exist only in the filename for one file. Large gzip must be streamed.

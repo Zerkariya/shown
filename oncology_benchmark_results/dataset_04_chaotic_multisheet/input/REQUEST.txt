@@ -1,0 +1,1 @@
+帮忙识别这几个文件是不是可以画拷贝数图。注意 Excel 的标题和尾注不是数据，另外核对 hg19/hg38。Warn on bad coordinates and ploidy.
