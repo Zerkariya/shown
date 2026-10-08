@@ -1,0 +1,1 @@
+Plot DEL/DUP/INV/TRA breakpoints with support and coverage. The BED is zero-based half-open; do not treat translocations as deletions.

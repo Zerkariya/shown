@@ -1,0 +1,1822 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="generator" content="shown csv-report">
+<title>Delly SV breakpoints and read depth</title>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7;
+  --surface: #fcfcfb;
+  --surface-2: #f3f2ee;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #898781;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --border: rgba(11, 11, 11, 0.10);
+  --accent: #2a78d6;
+  --c1: #2a78d6; --c2: #eb6834; --c3: #1baf7a; --c4: #eda100;
+  --c5: #e87ba4; --c6: #008300; --c7: #4a3aa7; --c8: #e34948;
+  --other: #b5b3ab;
+  /* ASCAT / Delly plot colours (taken from their R code) */
+  --ascat-major: #e03546; --ascat-minor: #3557e0;
+  --ascat-total: #943cc3; --ascat-rawminor: #60af36;
+  --ascat-seg: #1b38ae; --ascat-point: rgba(224, 53, 70, 0.30);
+  --delly-seg: #31a354; --delly-point: rgba(11, 11, 11, 0.22);
+  /* copy-number states (diverging blue <-> red, grey midpoint) */
+  --cn-homdel: #184f95; --cn-loss: #6da7ec; --cn-neutral: #ebeae5;
+  --cn-gain: #f08e8a; --cn-amp: #b8312f; --cn-nodata: #f9f9f7;
+  --freq-gain: #e34948; --freq-loss: #2a78d6;
+  --warn: #fab219; --critical: #d03b3b;
+  --font: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --surface-2: #232321;
+    --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --border: rgba(255, 255, 255, 0.10);
+    --accent: #3987e5;
+    --c1: #3987e5; --c2: #d95926; --c3: #199e70; --c4: #c98500;
+    --c5: #d55181; --c6: #008300; --c7: #9085e9; --c8: #e66767;
+    --other: #6b6a65;
+    --ascat-major: #ec5361; --ascat-minor: #6684f2;
+    --ascat-total: #b46ee0; --ascat-rawminor: #72c447;
+    --ascat-seg: #7e98ff; --ascat-point: rgba(236, 83, 97, 0.35);
+    --delly-seg: #3fbf66; --delly-point: rgba(255, 255, 255, 0.25);
+    --cn-homdel: #3d7fd6; --cn-loss: #1f4e86; --cn-neutral: #2c2c2a;
+    --cn-gain: #8c3432; --cn-amp: #ef6b67; --cn-nodata: #1a1a19;
+    --freq-gain: #e66767; --freq-loss: #3987e5;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface: #1a1a19; --surface-2: #232321;
+  --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
+  --grid: #2c2c2a; --axis: #383835; --border: rgba(255, 255, 255, 0.10);
+  --accent: #3987e5;
+  --c1: #3987e5; --c2: #d95926; --c3: #199e70; --c4: #c98500;
+  --c5: #d55181; --c6: #008300; --c7: #9085e9; --c8: #e66767;
+  --other: #6b6a65;
+  --ascat-major: #ec5361; --ascat-minor: #6684f2;
+  --ascat-total: #b46ee0; --ascat-rawminor: #72c447;
+  --ascat-seg: #7e98ff; --ascat-point: rgba(236, 83, 97, 0.35);
+  --delly-seg: #3fbf66; --delly-point: rgba(255, 255, 255, 0.25);
+  --cn-homdel: #3d7fd6; --cn-loss: #1f4e86; --cn-neutral: #2c2c2a;
+  --cn-gain: #8c3432; --cn-amp: #ef6b67; --cn-nodata: #1a1a19;
+  --freq-gain: #e66767; --freq-loss: #3987e5;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--page); color: var(--ink); font: 14px/1.5 var(--font);
+  -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 1440px; margin: 0 auto; padding: 16px; }
+header.top { display: flex; gap: 16px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
+header.top h1 { font-size: 22px; line-height: 1.3; margin: 0 0 4px; font-weight: 650; letter-spacing: -0.01em; }
+.subtitle { color: var(--ink-2); margin: 0; }
+.metaline { color: var(--muted); font-size: 12px; margin-top: 6px; }
+.btn, select, input[type="search"] {
+  font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; padding: 6px 10px; min-height: 34px;
+}
+.btn { cursor: pointer; }
+.btn:hover { background: var(--surface-2); }
+.btn[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.btn:focus-visible, select:focus-visible, input:focus-visible, .tab:focus-visible, tr[tabindex]:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
+nav.tabs {
+  display: flex; gap: 4px; margin: 16px 0 12px; border-bottom: 1px solid var(--grid);
+  overflow-x: auto; scrollbar-width: none;
+}
+.tab {
+  font: inherit; background: none; border: 0; padding: 10px 12px; color: var(--ink-2); cursor: pointer;
+  border-bottom: 2px solid transparent; white-space: nowrap; margin-bottom: -1px;
+}
+.tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--ink); font-weight: 600; }
+section.view { display: none; }
+section.view.active { display: block; }
+.card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px;
+  margin-bottom: 16px; min-width: 0;
+}
+.card h2 { font-size: 15px; margin: 0 0 2px; font-weight: 620; }
+.card h3 { font-size: 14px; margin: 0; font-weight: 600; }
+.card .sub { color: var(--muted); font-size: 12px; margin: 0 0 10px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.tile { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
+.tile .label { color: var(--ink-2); font-size: 12px; }
+.tile .value { font-size: 24px; font-weight: 640; line-height: 1.25; margin-top: 2px; }
+.tile .note { color: var(--muted); font-size: 12px; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 520px), 1fr)); gap: 16px; }
+.attr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 16px; }
+.attr-grid .card { margin: 0; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--ink-2); margin: 0 0 8px; }
+.legend .key { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 10px; height: 10px; border-radius: 2px; display: inline-block; flex: none; }
+.sw.dot { border-radius: 50%; }
+.sw.line { width: 14px; height: 3px; border-radius: 2px; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+.toolbar .spacer { flex: 1; }
+.toolbar label { display: inline-flex; gap: 6px; align-items: center; color: var(--ink-2); font-size: 13px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font-size: 12px; background: var(--surface-2); border-radius: 999px; padding: 3px 10px; color: var(--ink-2); }
+.chip b { color: var(--ink); font-weight: 600; }
+.insights { margin: 0; padding-left: 18px; }
+.insights li { margin: 4px 0; }
+.badge { font-size: 11px; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px; margin-left: 6px; font-weight: 400; vertical-align: 2px; }
+.scroll-x { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+table.data { border-collapse: collapse; width: 100%; font-size: 13px; }
+table.data th, table.data td { padding: 6px 10px; border-bottom: 1px solid var(--grid); text-align: left; white-space: nowrap; }
+table.data th { position: sticky; top: 0; background: var(--surface); color: var(--ink-2); font-weight: 600; cursor: pointer; user-select: none; z-index: 1; }
+table.data th[aria-sort="ascending"]::after { content: " \2191"; }
+table.data th[aria-sort="descending"]::after { content: " \2193"; }
+table.data td.num, table.data th.num { text-align: right; font-variant-numeric: tabular-nums; }
+table.data tbody tr[tabindex] { cursor: pointer; }
+table.data tbody tr:hover { background: var(--surface-2); }
+.table-box { max-height: 560px; overflow: auto; border: 1px solid var(--grid); border-radius: 8px; }
+.pager { display: flex; gap: 8px; align-items: center; justify-content: flex-end; margin-top: 8px; color: var(--ink-2); font-size: 12px; }
+.chart { position: relative; width: 100%; }
+.chart svg { display: block; overflow: visible; }
+.track { position: relative; margin-top: 6px; }
+.track-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.track-head h3 { font-size: 13px; }
+.track canvas, .chart canvas { display: block; width: 100%; touch-action: pan-y; }
+.crosshair { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--ink-2); opacity: .55; pointer-events: none; display: none; }
+.brush { position: absolute; top: 0; bottom: 0; background: var(--accent); opacity: .12; pointer-events: none; display: none; }
+.axis-strip canvas { cursor: pointer; }
+#tooltip {
+  position: fixed; z-index: 50; pointer-events: none; display: none; max-width: 340px;
+  background: var(--surface); color: var(--ink); border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, .12); padding: 8px 10px; font-size: 12px;
+}
+#tooltip .tt-title { color: var(--ink-2); margin-bottom: 4px; }
+#tooltip .tt-row { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
+#tooltip .tt-row .k { color: var(--ink-2); display: inline-flex; gap: 6px; align-items: center; }
+#tooltip .tt-row .v { font-weight: 640; font-variant-numeric: tabular-nums; }
+.empty { color: var(--muted); padding: 24px 0; text-align: center; }
+.warnlist li { margin: 4px 0; }
+.warnlist li::marker { content: "\26A0  "; color: var(--warn); }
+pre.json { background: var(--surface-2); border-radius: 8px; padding: 12px; overflow: auto; max-height: 420px; font-size: 12px; }
+details > summary { cursor: pointer; color: var(--ink-2); margin: 8px 0; }
+dl.defs { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; font-size: 13px; }
+dl.defs dt { font-weight: 600; }
+dl.defs dd { margin: 0; color: var(--ink-2); }
+.hint { color: var(--muted); font-size: 12px; }
+@media (max-width: 640px) {
+  header.top h1 { font-size: 18px; }
+  .tile .value { font-size: 20px; }
+  .card { padding: 12px; }
+}
+@media print {
+  nav.tabs, .toolbar, #theme-btn { display: none; }
+  section.view { display: block !important; break-before: page; }
+}
+@media (forced-colors: active) {
+  .sw, .btn[aria-pressed="true"] { forced-color-adjust: none; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1 id="title"></h1>
+      <p class="subtitle" id="subtitle"></p>
+      <div class="metaline" id="metaline"></div>
+    </div>
+    <div class="toolbar" style="margin:0">
+      <button class="btn" id="lang-btn" type="button"></button>
+      <button class="btn" id="theme-btn" type="button"></button>
+    </div>
+  </header>
+  <nav class="tabs" id="tabs" role="tablist"></nav>
+  <main id="main">
+    <section class="view" id="view-overview" role="tabpanel"></section>
+    <section class="view" id="view-cn" role="tabpanel"></section>
+    <section class="view" id="view-sv" role="tabpanel"></section>
+    <section class="view" id="view-patient" role="tabpanel"></section>
+    <section class="view" id="view-data" role="tabpanel"></section>
+  </main>
+</div>
+<div id="tooltip" role="tooltip"></div>
+<script id="report-data" type="application/json">{"version":"1.1.0","meta":{"title":"Delly SV breakpoints and read depth","subtitle":"","title_zh":"Delly 结构变异断点与测序深度","subtitle_zh":null,"language":"en","generated":"2026-10-08 06:36","genome":"hg19","y_limit":5,"group_by":null,"insights":[],"insights_zh":[],"insights_label":null,"insights_label_zh":null,"sources":[{"table":0,"kind":"variants","file":"../../bench/test_data/dataset_03_delly_breakpoints/calls.vcf","sheet":null,"format":"vcf","header_row":1,"rows":130,"filtered_out":91,"columns":["CHROM","POS","ID","REF","ALT","QUAL","FILTER","INFO_SVTYPE","INFO_END","INFO_CHR2","P001.GT","P001.DV","P002.GT","P002.DV","P003.GT","P003.DV"],"mapping":{"patient":"=P001","chrom":"CHROM","pos":"POS","id":"ID","alt":"ALT","svtype":"INFO_SVTYPE","end":"INFO_END","chrom2":"INFO_CHR2","qual":"QUAL","filter":"FILTER","genotype":"P001.GT","pe":"P001.DV"},"transforms":{},"attributes":[],"extra_columns":[],"unused_columns":["REF","P002.GT","P002.DV","P003.GT","P003.DV"]},{"table":1,"kind":"variants","file":"../../bench/test_data/dataset_03_delly_breakpoints/calls.vcf","sheet":null,"format":"vcf","header_row":1,"rows":130,"filtered_out":89,"columns":["CHROM","POS","ID","REF","ALT","QUAL","FILTER","INFO_SVTYPE","INFO_END","INFO_CHR2","P001.GT","P001.DV","P002.GT","P002.DV","P003.GT","P003.DV"],"mapping":{"patient":"=P002","chrom":"CHROM","pos":"POS","id":"ID","alt":"ALT","svtype":"INFO_SVTYPE","end":"INFO_END","chrom2":"INFO_CHR2","qual":"QUAL","filter":"FILTER","genotype":"P002.GT","pe":"P002.DV"},"transforms":{},"attributes":[],"extra_columns":[],"unused_columns":["REF","P001.GT","P001.DV","P003.GT","P003.DV"]},{"table":2,"kind":"variants","file":"../../bench/test_data/dataset_03_delly_breakpoints/calls.vcf","sheet":null,"format":"vcf","header_row":1,"rows":130,"filtered_out":80,"columns":["CHROM","POS","ID","REF","ALT","QUAL","FILTER","INFO_SVTYPE","INFO_END","INFO_CHR2","P001.GT","P001.DV","P002.GT","P002.DV","P003.GT","P003.DV"],"mapping":{"patient":"=P003","chrom":"CHROM","pos":"POS","id":"ID","alt":"ALT","svtype":"INFO_SVTYPE","end":"INFO_END","chrom2":"INFO_CHR2","qual":"QUAL","filter":"FILTER","genotype":"P003.GT","pe":"P003.DV"},"transforms":{},"attributes":[],"extra_columns":[],"unused_columns":["REF","P001.GT","P001.DV","P002.GT","P002.DV"]},{"table":3,"kind":"bins","file":"../../bench/test_data/dataset_03_delly_breakpoints/coverage.cov.gz","sheet":null,"format":"delimited","header_row":1,"rows":435,"filtered_out":0,"columns":["specimen","contig","from0","to_excl","reads","depth_ratio"],"mapping":{"patient":"specimen","chrom":"contig","start":"from0","end":"to_excl","logr":"depth_ratio"},"transforms":{"logr":{"op":"log2"}},"attributes":[],"extra_columns":[],"unused_columns":["reads"]},{"table":4,"kind":"segments","file":"../../bench/test_data/dataset_03_delly_breakpoints/breakpoint_regions.seg.bed","sheet":null,"format":"delimited","header_row":0,"rows":100,"filtered_out":0,"columns":["column_1","column_2","column_3","column_4"],"mapping":{"patient":"=P001","chrom":"column_1","start":"column_2","end":"column_3","logr":"column_4"},"transforms":{},"attributes":[],"extra_columns":[],"unused_columns":[]}],"warnings":[],"mapping":{"title":"Delly SV breakpoints and read depth","title_zh":"Delly 结构变异断点与测序深度","genome":"hg19","tables":[{"file":"/tmp/claude-0/-home-user-shown/bc3e21db-478c-538a-9c7e-b11ca7ae1833/scratchpad/bench/test_data/dataset_03_delly_breakpoints/calls.vcf","kind":"variants","columns":{"patient":{"value":"P001"},"chrom":"CHROM","pos":"POS","id":"ID","alt":"ALT","svtype":"INFO_SVTYPE","end":"INFO_END","chrom2":"INFO_CHR2","qual":"QUAL","filter":"FILTER","genotype":"P001.GT","pe":"P001.DV"},"row_filter":[{"column":"P001.GT","op":"not_in","value":["0/0","./."]}],"exclude":["REF","P001.GT","P001.DV","P002.GT","P002.DV","P003.GT","P003.DV"]},{"file":"/tmp/claude-0/-home-user-shown/bc3e21db-478c-538a-9c7e-b11ca7ae1833/scratchpad/bench/test_data/dataset_03_delly_breakpoints/calls.vcf","kind":"variants","columns":{"patient":{"value":"P002"},"chrom":"CHROM","pos":"POS","id":"ID","alt":"ALT","svtype":"INFO_SVTYPE","end":"INFO_END","chrom2":"INFO_CHR2","qual":"QUAL","filter":"FILTER","genotype":"P002.GT","pe":"P002.DV"},"row_filter":[{"column":"P002.GT","op":"not_in","value":["0/0","./."]}],"exclude":["REF","P001.GT","P001.DV","P002.GT","P002.DV","P003.GT","P003.DV"]},{"file":"/tmp/claude-0/-home-user-shown/bc3e21db-478c-538a-9c7e-b11ca7ae1833/scratchpad/bench/test_data/dataset_03_delly_breakpoints/calls.vcf","kind":"variants","columns":{"patient":{"value":"P003"},"chrom":"CHROM","pos":"POS","id":"ID","alt":"ALT","svtype":"INFO_SVTYPE","end":"INFO_END","chrom2":"INFO_CHR2","qual":"QUAL","filter":"FILTER","genotype":"P003.GT","pe":"P003.DV"},"row_filter":[{"column":"P003.GT","op":"not_in","value":["0/0","./."]}],"exclude":["REF","P001.GT","P001.DV","P002.GT","P002.DV","P003.GT","P003.DV"]},{"file":"/tmp/claude-0/-home-user-shown/bc3e21db-478c-538a-9c7e-b11ca7ae1833/scratchpad/bench/test_data/dataset_03_delly_breakpoints/coverage.cov.gz","kind":"bins","columns":{"patient":"specimen","chrom":"contig","start":"from0","end":"to_excl","logr":"depth_ratio"},"transforms":{"logr":{"op":"log2"}}},{"file":"/tmp/claude-0/-home-user-shown/bc3e21db-478c-538a-9c7e-b11ca7ae1833/scratchpad/bench/test_data/dataset_03_delly_breakpoints/breakpoint_regions.seg.bed","kind":"segments","columns":{"patient":{"value":"P001"},"chrom":"column_1","start":"column_2","end":"column_3","logr":"column_4"}}]}},"chroms":[["1",249250621],["2",243199373],["3",198022430],["4",191154276],["5",180915260],["6",171115067],["7",159138663],["8",146364022],["9",141213431],["10",135534747],["11",135006516],["12",133851895],["13",115169878],["14",107349540],["15",102531392],["16",90354753],["17",81195210],["18",78077248],["19",59128983],["20",63025520],["21",48129895],["22",51304566],["X",155270560],["Y",59373566]],"attributes":[],"patients":[{"id":"P001","attrs":{},"purity":null,"ploidy":null,"ploidy_source":null,"goodness_of_fit":null,"sex":null,"metrics":{"n_segs":100,"n_sv":39,"n_sv_pass":30},"has":{"segments":true,"variants":true,"bins":true}},{"id":"P002","attrs":{},"purity":null,"ploidy":null,"ploidy_source":null,"goodness_of_fit":null,"sex":null,"metrics":{"n_sv":41,"n_sv_pass":32},"has":{"segments":false,"variants":true,"bins":true}},{"id":"P003","attrs":{},"purity":null,"ploidy":null,"ploidy_source":null,"goodness_of_fit":null,"sex":null,"metrics":{"n_sv":50,"n_sv_pass":35},"has":{"segments":false,"variants":true,"bins":true}}],"segments":{"P001":[[0,0,39699616,null,null,null,null,null,null,-0.0237,null],[0,39699616,46957571,null,null,null,null,null,null,0.0133,null],[0,46957571,62349185,null,null,null,null,null,null,0.1286,null],[0,62349185,70400604,null,null,null,null,null,null,0.0098,null],[0,70400604,76349776,null,null,null,null,null,null,-0.0543,null],[0,76349776,209094155,null,null,null,null,null,null,-0.3631,null],[0,209094155,239248909,null,null,null,null,null,null,0.2043,null],[0,239248909,249250621,null,null,null,null,null,null,0.0521,null],[1,0,96087729,null,null,null,null,null,null,-0.0818,null],[1,96087729,105178148,null,null,null,null,null,null,0.3539,null],[1,105178148,118695979,null,null,null,null,null,null,-0.3886,null],[1,118695979,137540619,null,null,null,null,null,null,0.0102,null],[1,137540619,204249598,null,null,null,null,null,null,-0.2023,null],[1,204249598,212195858,null,null,null,null,null,null,0.1926,null],[1,212195858,243199373,null,null,null,null,null,null,0.1629,null],[2,0,16294685,null,null,null,null,null,null,0.0146,null],[2,16294685,20376675,null,null,null,null,null,null,-0.031,null],[2,20376675,45372237,null,null,null,null,null,null,0.1711,null],[2,45372237,62250815,null,null,null,null,null,null,0.0829,null],[2,62250815,65309798,null,null,null,null,null,null,-0.1793,null],[2,65309798,80757070,null,null,null,null,null,null,-0.0047,null],[2,80757070,198022430,null,null,null,null,null,null,-0.0263,null],[3,0,9243232,null,null,null,null,null,null,-0.0592,null],[3,9243232,58738171,null,null,null,null,null,null,-0.0465,null],[3,58738171,111984703,null,null,null,null,null,null,0.0112,null],[3,111984703,175945414,null,null,null,null,null,null,-0.006,null],[3,175945414,191154276,null,null,null,null,null,null,0.0192,null],[4,0,24538563,null,null,null,null,null,null,-0.1537,null],[4,24538563,29983656,null,null,null,null,null,null,0.0503,null],[4,29983656,94208809,null,null,null,null,null,null,0.2575,null],[4,94208809,100131809,null,null,null,null,null,null,-0.0059,null],[4,100131809,105700244,null,null,null,null,null,null,0.0319,null],[4,105700244,107622447,null,null,null,null,null,null,0.0156,null],[4,107622447,125802721,null,null,null,null,null,null,0.3052,null],[4,125802721,141327798,null,null,null,null,null,null,-0.027,null],[4,141327798,180915260,null,null,null,null,null,null,-0.0852,null],[5,0,42160275,null,null,null,null,null,null,0.0379,null],[5,42160275,51826973,null,null,null,null,null,null,0.0665,null],[5,51826973,88496970,null,null,null,null,null,null,-0.1869,null],[5,88496970,109372592,null,null,null,null,null,null,0.0637,null],[5,109372592,171115067,null,null,null,null,null,null,-0.0434,null],[6,0,98117131,null,null,null,null,null,null,0.176,null],[6,98117131,100858145,null,null,null,null,null,null,0.0528,null],[6,100858145,109740534,null,null,null,null,null,null,-0.0042,null],[6,109740534,159138663,null,null,null,null,null,null,-0.0217,null],[7,0,21193213,null,null,null,null,null,null,0.0057,null],[7,21193213,78841572,null,null,null,null,null,null,0.1376,null],[7,78841572,103284980,null,null,null,null,null,null,0.1325,null],[7,103284980,110688166,null,null,null,null,null,null,-0.455,null],[7,110688166,130062993,null,null,null,null,null,null,0.002,null],[7,130062993,142548543,null,null,null,null,null,null,0.0511,null],[7,142548543,146364022,null,null,null,null,null,null,0.304,null],[8,0,39484550,null,null,null,null,null,null,0.248,null],[8,39484550,54626771,null,null,null,null,null,null,-0.0476,null],[8,54626771,103575274,null,null,null,null,null,null,0.2266,null],[8,103575274,118726973,null,null,null,null,null,null,-0.0008,null],[8,118726973,122945523,null,null,null,null,null,null,0.0441,null],[8,122945523,134724759,null,null,null,null,null,null,-0.0046,null],[8,134724759,141213431,null,null,null,null,null,null,0.0165,null],[9,0,9021973,null,null,null,null,null,null,0.0294,null],[9,9021973,24776592,null,null,null,null,null,null,0.059,null],[9,24776592,50799007,null,null,null,null,null,null,0.1839,null],[9,50799007,59437573,null,null,null,null,null,null,0.0599,null],[9,59437573,88307654,null,null,null,null,null,null,0.092,null],[9,88307654,115863409,null,null,null,null,null,null,0.1878,null],[9,115863409,135534747,null,null,null,null,null,null,-0.2482,null],[10,0,57217905,null,null,null,null,null,null,0.0028,null],[10,57217905,58763259,null,null,null,null,null,null,-0.0311,null],[10,58763259,64735761,null,null,null,null,null,null,-0.0391,null],[10,64735761,77028493,null,null,null,null,null,null,0.3343,null],[10,77028493,86566490,null,null,null,null,null,null,0.035,null],[10,86566490,115311729,null,null,null,null,null,null,-0.0332,null],[10,115311729,130191779,null,null,null,null,null,null,0.0789,null],[10,130191779,135006516,null,null,null,null,null,null,0.034,null],[11,0,31785199,null,null,null,null,null,null,0.031,null],[11,31785199,52803979,null,null,null,null,null,null,0.2047,null],[11,52803979,72986686,null,null,null,null,null,null,0.0103,null],[11,72986686,78586667,null,null,null,null,null,null,-0.0438,null],[11,78586667,115160993,null,null,null,null,null,null,0.218,null],[11,115160993,116732352,null,null,null,null,null,null,0.3038,null],[11,116732352,118037586,null,null,null,null,null,null,0.2286,null],[11,118037586,131134654,null,null,null,null,null,null,-0.0417,null],[11,131134654,133851895,null,null,null,null,null,null,-0.0588,null],[12,0,61759,null,null,null,null,null,null,0.0043,null],[12,61759,13348745,null,null,null,null,null,null,-0.0305,null],[12,13348745,35506661,null,null,null,null,null,null,0.165,null],[12,35506661,82049924,null,null,null,null,null,null,-0.0106,null],[12,82049924,109159524,null,null,null,null,null,null,0.1989,null],[12,109159524,115169878,null,null,null,null,null,null,0.1986,null],[13,0,8530072,null,null,null,null,null,null,-0.1012,null],[13,8530072,18121854,null,null,null,null,null,null,0.0206,null],[13,18121854,54261946,null,null,null,null,null,null,-0.1817,null],[13,54261946,70617892,null,null,null,null,null,null,0.0014,null],[13,70617892,72060704,null,null,null,null,null,null,-0.1377,null],[13,72060704,97480050,null,null,null,null,null,null,-0.165,null],[13,97480050,100843554,null,null,null,null,null,null,-0.0264,null],[13,100843554,107349540,null,null,null,null,null,null,0.3632,null],[14,0,8153437,null,null,null,null,null,null,0.1213,null],[14,8153437,11131066,null,null,null,null,null,null,-0.0026,null],[14,11131066,46197652,null,null,null,null,null,null,-0.0113,null]]},"bins":{"P001":{"c":[0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,2,2,2,2,2,2,2,3,3,3,3,3,4,4,4,4,4,4,4,4,4,5,5,5,5,5,6,6,6,6,7,7,7,7,7,7,7,8,8,8,8,8,8,8,9,9,9,9,9,9,9,10,10,10,10,10,10,10,10,11,11,11,11,11,11,11,11,11,12,12,12,12,12,12,13,13,13,13,13,13,13,13,14,14,14,14,14,14,14,15,15,15,15,15,15,15,15,16,16,16,16,16,16,16,17,17,17,17,17,18,18,18,18,18,18,19,19,19,19,19,19,20,20,20,20,20,21,21,21,21,21],"p":[19849808,43328594,54653378,66374894,73375190,142721966,224171532,244249765,48043864,100632938,111937064,128118299,170895108,208222728,227697616,8147342,18335680,32874456,53811526,63780306,73033434,139389750,4621616,33990702,85361437,143965058,183549845,12269282,27261110,62096232,97170309,102916026,106661346,116712584,133565260,161121529,21080138,46993624,70161972,98934781,140243830,49058566,99487638,105299340,134439598,10596606,50017392,91063276,106986573,120375580,136305768,144456282,19742275,47055660,79101022,111151124,120836248,128835141,137969095,4510986,16899282,37787800,55118290,73872614,102085532,125699078,28608952,57990582,61749510,70882127,81797492,100939110,122751754,132599148,15892600,42294589,62895332,75786676,96873830,115946672,117384969,124586120,132493274,30880,6705252,24427703,58778292,95604724,112164701,4265036,13325963,36191900,62439919,71339298,84770377,99161802,104096547,4076718,9642252,28664359,48979030,66141148,91060358,102065110,3682098,31887737,56666632,65613484,77638448,81899012,83285021,87049342,9459369,21731312,29169902,46737218,62255228,65247905,73429542,2676782,23651615,47925996,65163112,77250574,7399978,28125788,42465435,48601568,55212566,57915114,16498874,33962692,45861294,59312896,62126246,62723586,447576,15780992,31440404,36672966,44630926,892054,4315810,12829730,30737284,46983594],"logr":[-0.0087,0.0272,0.1699,-0.0454,-0.0454,-0.364,0.1725,-0.0306,-0.0014,0.1941,-0.3492,0.0566,-0.152,0.2079,0.1336,0.0186,0.0186,0.1852,0.107,-0.1504,0.0144,-0.0029,-0.0058,0.1043,-0.144,-0.077,0.0398,-0.1504,-0.0058,0.1648,-0.0116,-0.0145,-0.0395,0.1309,-0.041,0.0827,0.0342,0.0635,-0.077,-0.0174,-0.0116,0.1532,0.0342,0.0454,-0.0469,-0.077,0.0922,0.1137,-0.3997,0.0215,-0.0954,0.3311,0.3103,-0.0277,0.0922,-0.0893,-0.0247,0.0384,-0.0145,-0.0454,-0.0499,0.1124,0.0356,0.0029,0.111,-0.1456,-0.0203,-0.074,0.0144,0.2987,0.0314,-0.0218,0.0286,0.0482,0.0286,0.127,-0.0203,-0.0087,0.1583,0.2928,0.1296,-0.016,0.0496,-0.0321,0.0014,0.1648,0.0215,0.1776,0.1686,-0.0203,-0.0877,-0.144,-0.041,-0.1828,-0.1811,0.0272,0.3057,0.1953,0.0129,0.0086,-0.0336,-0.0831,0.3115,-0.1681,0.0101,0.0201,0.1852,-0.16,-0.0277,-0.1219,-0.0043,0.0426,-0.0893,-0.0145,0.1467,0.1596,-0.0233,0.2154,-0.4481,0.0841,-0.2828,0.0286,-0.0116,0.3138,-0.0484,0.0482,0.2594,0.2228,0.1467,0.0468,-0.0189,-0.0574,0.1674,0.0115,-0.331,-0.2226,0.0356,0.0201,0.2203,0.3741,0.0043,-0.0908,-0.0499,0.0412,0.0272,0.051]},"P002":{"c":[0,0,0,0,0,0,0,0,1,1,1,1,1,1,2,2,2,2,2,2,2,2,3,3,3,3,3,3,3,4,4,4,4,4,4,5,5,5,5,5,5,5,6,6,6,6,6,6,7,7,7,7,8,8,8,8,8,8,8,8,9,9,9,9,9,10,10,10,10,10,10,10,10,10,11,11,11,11,11,11,11,11,12,12,12,12,12,12,12,12,12,13,13,13,13,13,13,13,13,13,14,14,14,14,14,15,15,15,15,15,15,15,15,15,16,16,16,16,16,17,17,17,17,17,17,18,18,18,18,18,18,18,18,19,19,19,19,19,19,20,20,20,20,21,21,21,21,21,21,21,21,21],"p":[15368551,60168502,99896947,130971300,159895081,187546630,208064260,229163718,1534388,17138244,43646692,73630790,156827065,232838796,5567056,46128124,87389712,102927229,113498028,119496342,127103878,164018192,8254509,46425854,80882921,99188286,127136254,146312710,171230303,42603646,115729242,150584813,163451020,175368454,179834280,23634970,55487612,96319758,129512480,139525896,150251300,161328301,30031445,85731104,112109004,113666309,129421850,151734218,38960610,96485051,126257193,141914762,10703356,34111070,50790442,68967849,89607846,99323073,116401344,135707713,16061626,61477322,93467866,110517591,130232795,16418128,40521072,51838308,73356976,98042267,105826507,108942059,113925513,125892564,3548410,13665652,41877556,78558838,95176526,98931708,107331960,123704200,5274388,23365648,36991465,43357154,51624554,64064131,77231121,93518566,110768910,11999058,28637686,35276014,43927654,60656990,77563144,86856039,96015684,105030835,29054228,60684926,65122098,71801916,89576211,5778071,14394148,20578532,28497528,47367409,73564666,86338966,87445238,89015980,10991872,27414646,36996705,46303246,66326920,4808944,13762306,33807280,53365410,65254972,75782104,2043802,5714092,11488430,25441802,38993168,44798376,49095505,55231128,4018684,11393064,17506084,21020336,34009684,54633813,314620,20390798,43198493,47187262,7821984,21664868,31825944,37117725,39505344,40841040,44293628,48562340,50391358],"logr":[0.8351,0.044,0.0398,0.543,-0.7298,-2.3219,0.518,0.473,0.4415,0.4772,-0.0306,0.4636,0.0257,0.0058,-0.662,-0.0679,-0.749,0.0158,0.0745,-0.041,0.5281,0.0272,-0.7155,0.03,-0.0174,0.5018,-0.7563,0.4531,0.5331,0.0058,-0.041,0.0607,-0.0087,-0.8084,0.5261,-0.0043,0.6182,0.0229,0.0043,0.0426,-0.013,-0.0306,-0.7274,0.5311,-0.7108,-0.0087,-0.8546,-0.0218,-0.0634,0.0215,0.0552,0.0186,0.4297,0.8742,0.1296,-0.013,0.0538,0.5281,-0.7515,0.4854,0.0356,0.0676,0.0072,-0.041,0.4947,-0.0145,0.434,0.0072,-0.7984,-0.0425,-0.0544,-0.7612,0.8774,0.8074,0.5028,0.7832,-0.0395,0.9199,0.544,0.8576,0.4573,0.4895,-0.071,-0.737,-0.0514,0.0607,-2.2863,-0.0695,-0.0218,-0.0145,0.4457,0.517,0.0229,0,-0.0306,0.0594,0.3984,-0.0262,-0.699,0.069,0.4573,-0.0087,-0.0058,-0.0499,0.4988,-0.6897,0.0496,-0.0233,0.0482,-0.706,-0.8084,-2.2653,-0.0484,0.3984,0.4957,-0.0529,-0.7322,0.0272,-0.0189,0.4657,-0.7984,-0.7984,0.8867,0.515,0.0043,-0.7274,0.5059,0.0398,0.0552,0.5341,0.0029,-0.0306,0.0496,0.0029,-0.0189,-0.6552,-0.7226,-0.0058,0.542,-0.7442,0.0215,0.0426,-0.6827,-0.0336,0.0058,-0.7274,0.8319,0.0314,-0.7442,0.0342,0.0257,0.4936]},"P003":{"c":[0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,3,3,3,3,3,4,4,4,4,4,4,4,5,5,5,5,5,5,6,6,6,6,6,7,7,7,7,7,7,7,7,8,8,8,8,9,9,9,9,10,10,10,10,10,10,10,11,11,11,11,11,11,11,11,11,12,12,12,12,12,12,12,12,13,13,13,13,14,14,14,14,14,14,14,14,15,15,15,15,15,15,16,16,16,16,16,17,17,17,17,17,17,18,18,18,18,19,19,19,19,19,20,20,20,20,20,20,20,21,21,21,21],"p":[16090956,48339836,69484272,102732536,142562419,183433004,217309538,233971762,247655263,10682090,35212093,51620552,78032838,104525117,148578686,216595546,1041081,30383942,66533720,95283506,120165088,133837643,164196622,186631994,193211788,29674664,74729278,121641088,154404230,173394893,47275028,94617683,94941768,116011461,145635246,165467297,178702030,14648017,39732004,73374562,127100584,160270787,167018311,20729595,42631457,49877058,96903076,148497212,5227748,24440932,61167194,89019394,105244014,119267623,132025112,144118130,22248662,55763889,72532530,109624018,45807998,106409497,125276486,132442360,11819988,25630868,45549180,71501538,83092392,97643941,121818044,4381112,9379152,20070400,38231601,46887508,48037782,54198168,80869834,117907130,487650,7454107,16653818,29247379,45946426,64943996,81031461,100058812,21916781,69016020,97134220,103709750,6591187,16665984,28189489,36362838,50451736,65827442,69480660,87122504,175268,16239964,35864126,56140222,79831824,88668408,11141500,41095384,63468719,73635006,80717775,4183752,8983973,13973032,20933153,29808600,57086884,9776114,29060200,47115170,57395576,19379888,41566572,47755463,51313696,57257677,974286,8450506,16483614,18294080,27737073,40254762,45869321,6399572,18025156,26335202,40361900],"logr":[-0.0072,-0.9105,-0.0262,0.0029,-0.0619,-0.897,-0.9132,-0.8314,-0.0336,-0.9132,-0.0189,-0.0484,-0.0043,-0.9546,0.9855,-0.9269,0.5568,0.0482,-0.0116,-0.0072,-0.0365,0.542,0.051,1.0524,0.044,0.0115,0.4854,-0.873,-0.0116,-0.9024,-0.0189,-0.0029,0.5479,-0.0664,-0.9971,0.9449,0.9207,0.0058,-0.1016,0.9789,0.0257,-0.0321,-0.0262,-0.9296,0.0086,-0.0087,-0.0189,0.0101,-0.016,-0.0499,0.6003,0.0649,-0.0029,0.929,0.8999,0.5039,-0.0043,0.03,-0.0116,0.0314,0.5917,-0.0306,-0.0203,0.5069,-0.0101,-0.016,-0.9187,-0.889,0.4977,0.03,-0.0695,0.0524,0.5772,0.0186,0.5617,0.0342,1.0072,-0.0262,-0.0262,-0.8943,-0.0336,-0.016,-0.0174,0.5509,0.9753,0.5049,0.9877,-0.0203,-0.0484,0.0029,0.4947,0.0172,-0.8339,0.9069,-0.0087,-0.9241,-0.0336,0.9184,0.9826,0.5089,-0.0174,0.0496,0.044,-0.0189,0.5211,0.0215,0.0635,-0.889,-0.9379,0.0072,-0.0247,0.622,-0.8625,-0.041,-0.0831,0.0257,0.5656,-0.0277,-0.0101,0.0895,-0.0218,-0.9546,0.0272,0.0043,0.4998,-0.0425,0.069,-0.9024,0.5069,-0.852,1.0517,-0.0469,0.9419,-0.8573,0.0186,0.6135,0.9964]}},"sv_columns":["patient","chrom","pos","end","chrom2","pos2","svtype","svlen","qual","filter","pe","sr","gt","id","precise","cn"],"sv_extra":[],"svs":[[0,0,39699617,40053649,0,null,"DEL",354032,570,"PASS",27,null,"0/1","SV0001",null,null],[0,23,1160369,1163170,23,null,"INV",2801,568,"PASS",8,null,"0/1","SV0004",null,null],[0,21,18811947,18815204,21,null,"DUP",3257,624,"PASS",41,null,"0/1","SV0005",null,null],[0,0,239248910,240103102,0,null,"DEL",854192,247,"PASS",5,null,"0/1","SV0008",null,null],[0,15,4850769,7014732,15,null,"INV",2163963,689,"PASS",22,null,"0/1","SV0009",null,null],[0,9,24776593,25316408,9,null,"DEL",539815,517,"PASS",49,null,"0/1","SV0013",null,null],[0,20,7509882,7650202,20,null,"INV",140320,450,"PASS",34,null,"0/1","SV0014",null,null],[0,1,7152974,7949169,1,null,"INV",796195,257,"PASS",22,null,"0/1","SV0020",null,null],[0,10,3590724,4936657,10,null,"INV",1345933,300,"PASS",49,null,"0/1","SV0021",null,null],[0,0,70400605,70402283,0,null,"DEL",1678,396,"LowQual",31,null,"0/1","SV0022",null,null],[0,5,8834080,null,10,23960208,"BND",null,307,"PASS",11,null,"0/1","SV0023",null,null],[0,6,1187615,null,13,27860350,"BND",null,700,"LowQual",48,null,"0/1","SV0024",null,null],[0,5,109372593,111603202,5,null,"DUP",2230609,477,"PASS",50,null,"0/1","SV0028",null,null],[0,7,21193214,21244024,7,null,"DUP",50810,323,"PASS",45,null,"0/1","SV0030",null,null],[0,16,24543888,24545928,16,null,"DEL",2040,51,"PASS",32,null,"0/1","SV0032",null,null],[0,18,43479251,43523933,18,null,"DEL",44682,597,"PASS",50,null,"0/1","SV0035",null,null],[0,3,111984704,112018173,3,null,"DUP",33469,282,"LowQual",11,null,"0/1","SV0036",null,null],[0,9,5048256,5718700,9,null,"INV",670444,420,"LowQual",34,null,"0/1","SV0039",null,null],[0,4,5803739,5918587,4,null,"INV",114848,697,"LowQual",18,null,"0/1","SV0041",null,null],[0,19,8773609,null,17,66720849,"BND",null,677,"PASS",33,null,"0/1","SV0050",null,null],[0,6,5052010,null,12,25901264,"BND",null,251,"PASS",34,null,"0/1","SV0055",null,null],[0,2,6115343,null,20,40371525,"BND",null,439,"LowQual",9,null,"0/1","SV0059",null,null],[0,17,53902325,54579575,17,null,"DEL",677250,90,"PASS",19,null,"0/1","SV0072",null,null],[0,20,895153,939791,20,null,"DUP",44638,260,"PASS",25,null,"0/1","SV0082",null,null],[0,22,3213258,null,21,30943125,"BND",null,314,"PASS",5,null,"0/1","SV0085",null,null],[0,4,141327799,141328397,4,null,"DEL",598,385,"PASS",14,null,"0/1","SV0089",null,null],[0,2,9496066,9507233,2,null,"DEL",11167,484,"PASS",37,null,"0/1","SV0090",null,null],[0,13,18121855,18121961,13,null,"DUP",106,183,"PASS",15,null,"0/1","SV0096",null,null],[0,3,111984704,112112972,3,null,"DEL",128268,356,"PASS",18,null,"0/1","SV0104",null,null],[0,11,4461511,4468596,11,null,"INV",7085,128,"PASS",35,null,"0/1","SV0105",null,null],[0,2,3213259,null,19,36271460,"BND",null,516,"PASS",48,null,"0/1","SV0107",null,null],[0,4,24538564,24596367,4,null,"DUP",57803,33,"LowQual",44,null,"0/1","SV0109",null,null],[0,2,62250816,62253309,2,null,"DEL",2493,197,"PASS",45,null,"0/1","SV0110",null,null],[0,1,105178149,105189224,1,null,"DEL",11075,514,"PASS",35,null,"0/1","SV0112",null,null],[0,1,212195859,212317119,1,null,"DEL",121260,311,"PASS",31,null,"0/1","SV0115",null,null],[0,2,6427075,6499380,2,null,"INV",72305,593,"PASS",18,null,"0/1","SV0118",null,null],[0,18,6755056,7037979,18,null,"INV",282923,427,"LowQual",41,null,"0/1","SV0119",null,null],[0,22,51982309,51984922,22,null,"DEL",2613,617,"LowQual",12,null,"0/1","SV0125",null,null],[0,16,18918739,21288878,16,null,"DUP",2370139,612,"PASS",23,null,"0/1","SV0126",null,null],[1,16,8462171,null,10,133075521,"BND",null,37,"LowQual",49,null,"0/1","SV0002",null,null],[1,2,2830524,null,18,41736268,"BND",null,562,"PASS",43,null,"0/1","SV0006",null,null],[1,16,41147863,41155474,16,null,"DUP",7611,411,"LowQual",22,null,"0/1","SV0010",null,null],[1,9,3106624,9616814,9,null,"BND",null,114,"PASS",37,null,"0/1","SV0016",null,null],[1,21,27685770,27797409,21,null,"DEL",111639,227,"PASS",30,null,"0/1","SV0017",null,null],[1,0,110193994,110195470,0,null,"DEL",1476,58,"LowQual",42,null,"0/1","SV0019",null,null],[1,11,6431224,6432375,11,null,"INV",1151,302,"PASS",21,null,"0/1","SV0025",null,null],[1,16,32845549,34745684,16,null,"DEL",1900135,436,"LowQual",27,null,"0/1","SV0029",null,null],[1,22,104361851,104361991,22,null,"DEL",140,51,"LowQual",8,null,"0/1","SV0031",null,null],[1,21,47646532,48509977,21,null,"DEL",863445,546,"PASS",33,null,"0/1","SV0038",null,null],[1,18,35247321,35551514,18,null,"DUP",304193,76,"LowQual",39,null,"0/1","SV0042",null,null],[1,15,87677207,87677343,15,null,"DEL",136,227,"PASS",42,null,"0/1","SV0045",null,null],[1,23,5886891,5907444,23,null,"DEL",20553,185,"PASS",18,null,"0/1","SV0057",null,null],[1,21,1726472,1726575,21,null,"DEL",103,496,"PASS",13,null,"0/1","SV0060",null,null],[1,9,90831395,90867800,9,null,"DUP",36405,562,"PASS",23,null,"0/1","SV0062",null,null],[1,7,82858,93208,7,null,"DEL",10350,168,"PASS",39,null,"0/1","SV0064",null,null],[1,21,40940725,41851904,21,null,"DUP",911179,354,"PASS",46,null,"0/1","SV0065",null,null],[1,13,1454476,null,11,17269498,"BND",null,110,"PASS",25,null,"0/1","SV0066",null,null],[1,18,9987751,9997179,18,null,"INV",9428,79,"PASS",21,null,"0/1","SV0069",null,null],[1,8,2662487,2714451,8,null,"INV",51964,602,"PASS",45,null,"0/1","SV0070",null,null],[1,1,106119,null,11,32730251,"BND",null,572,"PASS",30,null,"0/1","SV0073",null,null],[1,8,6003089,6011147,8,null,"INV",8058,303,"PASS",15,null,"0/1","SV0074",null,null],[1,15,17232155,17232299,15,null,"DEL",144,254,"PASS",37,null,"0/1","SV0078",null,null],[1,16,21983745,21983921,16,null,"DEL",176,250,"PASS",44,null,"0/1","SV0079",null,null],[1,13,70733448,70734915,13,null,"DEL",1467,397,"PASS",10,null,"0/1","SV0088",null,null],[1,3,7922272,null,2,16250471,"BND",null,119,"LowQual",49,null,"0/1","SV0093",null,null],[1,0,151748608,153810616,0,null,"DEL",2062008,373,"PASS",45,null,"0/1","SV0094",null,null],[1,8,46815427,46815569,8,null,"DEL",142,232,"PASS",24,null,"0/1","SV0095",null,null],[1,18,7740988,8616576,18,null,"DEL",875588,569,"LowQual",15,null,"0/1","SV0097",null,null],[1,21,1774053,1810144,21,null,"INV",36091,83,"PASS",10,null,"0/1","SV0099",null,null],[1,1,222478220,222479059,1,null,"DUP",839,438,"PASS",8,null,"0/1","SV0100",null,null],[1,19,9293605,51984915,19,null,"BND",null,576,"PASS",38,null,"0/1","SV0101",null,null],[1,20,40152357,40153381,20,null,"DEL",1024,58,"PASS",25,null,"0/1","SV0108",null,null],[1,15,87677207,87677480,15,null,"DEL",273,340,"PASS",19,null,"0/1","SV0111",null,null],[1,1,222478220,222482161,1,null,"DEL",3941,381,"PASS",41,null,"0/1","SV0113",null,null],[1,6,3559341,3586608,6,null,"DEL",27267,665,"PASS",17,null,"0/1","SV0114",null,null],[1,23,286294,387364,23,null,"INV",101070,450,"LowQual",35,null,"0/1","SV0117",null,null],[1,21,3057634,3057981,21,null,"INV",347,43,"PASS",44,null,"0/1","SV0122",null,null],[1,10,5704525,null,0,24507295,"BND",null,49,"PASS",24,null,"0/1","SV0123",null,null],[1,6,60062891,60307236,6,null,"DEL",244345,81,"PASS",14,null,"0/1","SV0124",null,null],[1,6,8602174,8602491,6,null,"INV",317,94,"PASS",27,null,"0/1","SV0127",null,null],[2,1,9063129,9106123,1,null,"INV",42994,617,"LowQual",9,null,"0/1","SV0003",null,null],[2,5,96581151,96581661,5,null,"DEL",510,380,"PASS",44,null,"0/1","SV0007",null,null],[2,10,23639977,23645999,10,null,"DEL",6022,407,"PASS",8,null,"0/1","SV0011",null,null],[2,18,551562,551679,18,null,"INV",117,167,"PASS",21,null,"0/1","SV0012",null,null],[2,5,7633360,null,16,5061371,"BND",null,493,"PASS",35,null,"0/1","SV0015",null,null],[2,11,46318486,46320121,11,null,"DEL",1635,496,"LowQual",16,null,"0/1","SV0018",null,null],[2,5,96581151,96582128,5,null,"DEL",977,197,"LowQual",46,null,"0/1","SV0026",null,null],[2,17,18345625,18352420,17,null,"DUP",6795,530,"LowQual",27,null,"0/1","SV0027",null,null],[2,5,4498830,null,18,35097813,"BND",null,232,"LowQual",11,null,"0/1","SV0033",null,null],[2,19,38759776,38762643,19,null,"DEL",2867,370,"PASS",25,null,"0/1","SV0034",null,null],[2,6,3386847,3462093,6,null,"INV",75246,83,"PASS",10,null,"0/1","SV0037",null,null],[2,20,6760178,6776126,20,null,"DUP",15948,232,"LowQual",38,null,"0/1","SV0040",null,null],[2,11,6721193,7818951,11,null,"INV",1097758,274,"PASS",41,null,"0/1","SV0043",null,null],[2,12,2265370,3137240,12,null,"INV",871870,128,"PASS",5,null,"0/1","SV0044",null,null],[2,10,23639977,23640282,10,null,"DUP",305,310,"PASS",33,null,"0/1","SV0046",null,null],[2,1,1138779,1956681,1,null,"DEL",817902,354,"LowQual",45,null,"0/1","SV0047",null,null],[2,12,13932914,13938569,12,null,"DEL",5655,184,"PASS",15,null,"0/1","SV0048",null,null],[2,5,29296035,29296369,5,null,"DUP",334,531,"PASS",26,null,"0/1","SV0049",null,null],[2,4,5946050,5951468,4,null,"INV",5418,391,"PASS",17,null,"0/1","SV0051",null,null],[2,2,58685722,59105401,2,null,"DEL",419679,258,"LowQual",26,null,"0/1","SV0052",null,null],[2,1,3790234,3791557,1,null,"INV",1323,259,"PASS",22,null,"0/1","SV0053",null,null],[2,13,3002781,null,15,71350554,"BND",null,564,"PASS",4,null,"0/1","SV0054",null,null],[2,23,8289520,null,20,34083864,"BND",null,539,"PASS",24,null,"0/1","SV0056",null,null],[2,23,28544723,28552256,23,null,"DEL",7533,23,"PASS",17,null,"0/1","SV0058",null,null],[2,1,107165656,107165855,1,null,"DEL",199,647,"PASS",45,null,"0/1","SV0061",null,null],[2,11,4159707,4170712,11,null,"INV",11005,479,"LowQual",44,null,"0/1","SV0063",null,null],[2,23,34873366,34986824,23,null,"DEL",113458,486,"PASS",47,null,"0/1","SV0067",null,null],[2,16,59907768,59907868,16,null,"DEL",100,487,"PASS",44,null,"0/1","SV0068",null,null],[2,21,3463590,null,2,55135185,"BND",null,578,"PASS",22,null,"0/1","SV0071",null,null],[2,11,9323613,null,19,8453441,"BND",null,546,"PASS",11,null,"0/1","SV0075",null,null],[2,19,38759776,39570770,19,null,"DEL",810994,138,"LowQual",19,null,"0/1","SV0076",null,null],[2,0,4170622,null,13,74499094,"BND",null,636,"PASS",39,null,"0/1","SV0077",null,null],[2,21,12799145,13713163,21,null,"DUP",914018,272,"PASS",45,null,"0/1","SV0080",null,null],[2,16,80240341,80263168,16,null,"DEL",22827,697,"PASS",23,null,"0/1","SV0081",null,null],[2,21,2387065,null,13,20017466,"BND",null,518,"PASS",11,null,"0/1","SV0083",null,null],[2,14,3573551,null,8,79367883,"BND",null,102,"LowQual",4,null,"0/1","SV0084",null,null],[2,5,5472126,null,15,7844001,"BND",null,664,"PASS",35,null,"0/1","SV0086",null,null],[2,2,74381721,74388177,2,null,"DUP",6456,284,"PASS",11,null,"0/1","SV0087",null,null],[2,22,44050183,44933655,22,null,"DEL",883472,310,"PASS",20,null,"0/1","SV0091",null,null],[2,22,44050183,44109295,22,null,"DEL",59112,132,"PASS",38,null,"0/1","SV0092",null,null],[2,5,50167976,52540943,5,null,"DEL",2372967,449,"PASS",50,null,"0/1","SV0098",null,null],[2,23,54694546,55536239,23,null,"DEL",841693,339,"LowQual",12,null,"0/1","SV0102",null,null],[2,20,5028650,5029461,20,null,"INV",811,143,"PASS",18,null,"0/1","SV0103",null,null],[2,0,1847201,2319302,0,null,"DEL",472101,226,"LowQual",40,null,"0/1","SV0106",null,null],[2,14,64407179,64407928,14,null,"DUP",749,152,"PASS",24,null,"0/1","SV0116",null,null],[2,18,2650992,2707570,18,null,"DEL",56578,22,"PASS",11,null,"0/1","SV0120",null,null],[2,19,38759776,38830479,19,null,"DUP",70703,554,"LowQual",24,null,"0/1","SV0121",null,null],[2,16,67029672,67146411,16,null,"DUP",116739,71,"LowQual",44,null,"0/1","SV0128",null,null],[2,22,77360810,77475439,22,null,"DUP",114629,484,"PASS",45,null,"0/1","SV0129",null,null],[2,23,7959446,8961037,23,null,"DUP",1001591,47,"PASS",24,null,"0/1","SV0130",null,null]]}</script>
+<script>
+(function () {
+"use strict";
+
+/* ======================================================================= *
+ * data & i18n
+ * ======================================================================= */
+var D = JSON.parse(document.getElementById("report-data").textContent);
+var LANG = store("shown-lang");
+if (LANG !== "en" && LANG !== "zh") LANG = D.meta.language === "zh" ? "zh" : "en";
+var I18N = {
+  zh: {
+    overview: "概览", cn: "拷贝数", sv: "结构变异", patient: "患者详情", data: "数据与映射",
+    theme_auto: "主题：跟随系统", theme_light: "主题：浅色", theme_dark: "主题：深色", other_lang: "English", lang_aria: "Switch to English",
+    generated: "生成于", genome: "参考基因组", patients: "患者", n_patients: "患者数",
+    with_cn: "有拷贝数数据", n_sv: "结构变异数", pass_only: "仅 PASS", median_purity: "中位纯度",
+    median_ploidy: "中位倍性", wgd_rate: "全基因组加倍 (WGD)", insights: "AI 解读", insights_note: "由 AI 根据汇总统计撰写，请结合原始数据核实",
+    purity_ploidy: "纯度 vs 倍性", purity_ploidy_sub: "每个点是一位患者（对应 ASCAT 的 purity / ploidy 拟合结果），点击查看详情",
+    purity: "纯度", ploidy: "倍性", gof: "拟合优度", other: "其他", missing: "缺失",
+    attributes: "患者信息分布", attributes_sub: "根据表格自动识别的字段（列数不固定，按实际数据生成）",
+    patient_table: "患者列表", search: "搜索…", rows: "行", page: "页", prev: "上一页", next: "下一页",
+    unique_values: "个不同取值", count: "数量", median: "中位数", range: "范围",
+    cn_freq: "队列拷贝数改变频率", cn_freq_sub: "每个基因组位置上发生扩增（上，红）/ 缺失（下，蓝）的患者比例；相对于 round(倍性)",
+    cn_heat: "拷贝数热图", cn_heat_sub: "每行一位患者，颜色为总拷贝数相对 round(倍性) 的状态；点击某行查看该患者",
+    sort_by: "排序", sort_group: "按分组", sort_gi: "按基因组不稳定性", sort_id: "按编号",
+    homdel: "纯合缺失", loss: "缺失", neutral: "正常", gain: "扩增", amp: "高度扩增", nodata: "无数据",
+    sv_per_patient: "每位患者的结构变异", sv_per_patient_sub: "按类型堆叠（Delly SVTYPE），按总数排序",
+    sv_size: "结构变异大小分布", sv_size_sub: "不含易位 (BND) 与插入 (INS)", sv_chrom: "按染色体分布", sv_chrom_sub: "按第一个断点所在染色体计数",
+    sv_table: "结构变异列表", all_patients: "全部患者", all_types: "全部类型",
+    select_patient: "选择患者", whole_genome: "全基因组", rounded: "取整", raw: "未取整",
+    track_profile: "ASCAT 拷贝数图谱", track_rd: "Delly 读深拷贝数", track_logr: "LogR", track_baf: "BAF",
+    track_sv: "结构变异", major: "主等位基因 (nMajor)", minor: "次等位基因 (nMinor)", total: "总拷贝数",
+    total_raw: "总拷贝数（未取整）", minor_raw: "次等位基因（未取整）", cn_points: "每个 bin 的拷贝数估计",
+    segments: "分段", seg_logr: "分段 LogR", raw_points: "原始数据点", fitted_baf: "拟合 BAF（由 nMajor/nMinor 与纯度推算）",
+    drag_zoom: "在图上拖动可放大，双击恢复", position: "位置", segment: "片段", state: "状态",
+    no_genomic: "该患者没有基因组数据（只有临床信息）", segments_table: "拷贝数片段", patient_svs: "该患者的结构变异",
+    size: "大小", type: "类型", chrom: "染色体", start: "起始", end: "终止", partner: "终点 / 伙伴断点",
+    sources: "数据来源", file: "文件", sheet: "工作表", kind: "数据类型", header_row: "表头行",
+    filtered: "被过滤", mapping: "列映射", unused: "未使用的列", warnings: "提示", no_warnings: "没有提示",
+    attr_list: "患者字段", field: "字段", label: "显示名", definitions: "指标定义", raw_mapping: "mapping.json 原文",
+    kind_patients: "患者信息", kind_segments: "拷贝数片段", kind_variants: "结构变异", kind_bins: "Bin / SNP 数据",
+    metrics: "指标", n_segs: "片段数", show_more: "显示更多", none: "无", borderline: "临界",
+    def_purity: "肿瘤细胞比例（ASCAT 的 purity / aberrant cell fraction）。",
+    def_ploidy: "平均拷贝数；如表中未提供，则按片段长度加权平均 nMajor+nMinor 推算。",
+    def_wgd: "全基因组加倍：按 ascat.metrics，常染色体上主等位基因拷贝数众数为 1 → 0，2 → 1，3–5 → 1+。若第二常见的状态覆盖的基因组比例与众数相差不到 5%，标记为“临界”。",
+    def_gi: "基因组不稳定性：常染色体上偏离 WGD 基线状态（1+1 或 2+2）的基因组比例（ascat.metrics 定义）。",
+    def_loh: "杂合性缺失：常染色体上 nMinor = 0 的基因组比例。",
+    def_fga: "基因组改变比例：常染色体上总拷贝数不等于其众数的比例（只有总拷贝数时也可计算）。",
+    def_state: "热图与频率图：总拷贝数 0 = 纯合缺失；低于 round(倍性) = 缺失；高于 = 扩增；超过 2×round(倍性) = 高度扩增。男性 X/Y 的基线减半。",
+    def_colors: "颜色沿用原工具：ASCAT 取整图谱 红 = nMajor、蓝 = nMinor；未取整 紫 = 总拷贝数、绿 = nMinor；Delly 读深图 绿线 = 分段。"
+  },
+  en: {
+    overview: "Overview", cn: "Copy number", sv: "Structural variants", patient: "Patient", data: "Data & mapping",
+    theme_auto: "Theme: system", theme_light: "Theme: light", theme_dark: "Theme: dark", other_lang: "中文", lang_aria: "切换到中文",
+    generated: "Generated", genome: "Genome", patients: "patients", n_patients: "Patients",
+    with_cn: "With copy-number data", n_sv: "Structural variants", pass_only: "PASS only", median_purity: "Median purity",
+    median_ploidy: "Median ploidy", wgd_rate: "Whole-genome doubling", insights: "AI notes", insights_note: "Written by an AI agent from the summary statistics; verify against the data",
+    purity_ploidy: "Purity vs ploidy", purity_ploidy_sub: "One dot per patient (ASCAT purity / ploidy fit); click to open",
+    purity: "Purity", ploidy: "Ploidy", gof: "Goodness of fit", other: "Other", missing: "Missing",
+    attributes: "Patient attributes", attributes_sub: "Fields detected in the input tables (the column set varies per dataset)",
+    patient_table: "Patients", search: "Search…", rows: "rows", page: "page", prev: "Previous", next: "Next",
+    unique_values: "distinct values", count: "Count", median: "Median", range: "Range",
+    cn_freq: "Copy-number alteration frequency", cn_freq_sub: "Share of patients with a gain (up, red) / loss (down, blue) at each position, relative to round(ploidy)",
+    cn_heat: "Copy-number heatmap", cn_heat_sub: "One row per patient; colour is total CN relative to round(ploidy). Click a row to open the patient",
+    sort_by: "Sort", sort_group: "By group", sort_gi: "By genomic instability", sort_id: "By ID",
+    homdel: "Homozygous deletion", loss: "Loss", neutral: "Neutral", gain: "Gain", amp: "Amplification", nodata: "No data",
+    sv_per_patient: "SVs per patient", sv_per_patient_sub: "Stacked by type (Delly SVTYPE), sorted by total",
+    sv_size: "SV size distribution", sv_size_sub: "Excludes translocations (BND) and insertions (INS)", sv_chrom: "By chromosome", sv_chrom_sub: "Counted at the first breakpoint",
+    sv_table: "Structural variant calls", all_patients: "All patients", all_types: "All types",
+    select_patient: "Patient", whole_genome: "Genome", rounded: "Rounded", raw: "Unrounded",
+    track_profile: "ASCAT copy-number profile", track_rd: "Delly read-depth copy number", track_logr: "LogR", track_baf: "BAF",
+    track_sv: "Structural variants", major: "Major allele (nMajor)", minor: "Minor allele (nMinor)", total: "Total CN",
+    total_raw: "Total CN (unrounded)", minor_raw: "Minor allele (unrounded)", cn_points: "Per-bin CN estimate",
+    segments: "Segments", seg_logr: "Segment LogR", raw_points: "Raw values", fitted_baf: "Fitted BAF (from nMajor/nMinor and purity)",
+    drag_zoom: "Drag on a track to zoom, double-click to reset", position: "Position", segment: "Segment", state: "State",
+    no_genomic: "No genomic data for this patient (attributes only)", segments_table: "Copy-number segments", patient_svs: "SVs of this patient",
+    size: "Size", type: "Type", chrom: "Chrom", start: "Start", end: "End", partner: "End / partner",
+    sources: "Sources", file: "File", sheet: "Sheet", kind: "Kind", header_row: "Header row",
+    filtered: "Filtered", mapping: "Column mapping", unused: "Unused columns", warnings: "Notes", no_warnings: "No notes",
+    attr_list: "Patient fields", field: "Field", label: "Label", definitions: "Definitions", raw_mapping: "mapping.json",
+    kind_patients: "Patient info", kind_segments: "CN segments", kind_variants: "Variants", kind_bins: "Bins / SNPs",
+    metrics: "Metrics", n_segs: "Segments", show_more: "Show more", none: "none", borderline: "borderline",
+    def_purity: "Tumour cell fraction (ASCAT purity / aberrant cell fraction).",
+    def_ploidy: "Average copy number; when not given, the length-weighted mean of nMajor+nMinor over segments.",
+    def_wgd: "Whole-genome doubling as in ascat.metrics: autosomal mode of the major allele 1 -> 0, 2 -> 1, 3-5 -> 1+. Marked borderline when the runner-up state covers within 5% as much of the genome.",
+    def_gi: "Genomic instability: autosomal fraction not at the WGD baseline state (1+1 or 2+2), as in ascat.metrics.",
+    def_loh: "Loss of heterozygosity: autosomal fraction with nMinor = 0.",
+    def_fga: "Fraction genome altered: autosomal fraction whose total CN differs from its mode (works with total CN only).",
+    def_state: "Heatmap and frequency plot: total CN 0 = homozygous deletion; below round(ploidy) = loss; above = gain; above 2 x round(ploidy) = amplification. Male X/Y baseline is halved.",
+    def_colors: "Colours follow the original tools: ASCAT rounded profile red = nMajor, blue = nMinor; unrounded purple = total, green = nMinor; Delly read-depth plot green line = segments."
+  }
+};
+function t(k) { var v = I18N[LANG][k]; return v == null ? k : v; }
+/* text written in the mapping: "label" is English (default), "label_zh" the Chinese variant */
+function loc(obj, key) { var zh = obj[key + "_zh"]; return LANG === "zh" && zh != null && zh !== "" && (!Array.isArray(zh) || zh.length) ? zh : obj[key]; }
+function lbl(a) { return loc(a, "label"); }
+
+/* ======================================================================= *
+ * helpers
+ * ======================================================================= */
+function h(tag, attrs) {
+  var e = document.createElement(tag);
+  if (attrs) for (var k in attrs) {
+    var v = attrs[k];
+    if (v == null || v === false) continue;
+    if (k === "text") e.textContent = v;
+    else if (k === "class") e.className = v;
+    else if (k.slice(0, 2) === "on") e.addEventListener(k.slice(2), v);
+    else if (k === "style") e.setAttribute("style", v);
+    else e.setAttribute(k, v === true ? "" : v);
+  }
+  for (var i = 2; i < arguments.length; i++) {
+    var c = arguments[i];
+    if (c == null || c === false) continue;
+    if (Array.isArray(c)) c.forEach(function (x) { if (x != null) e.appendChild(typeof x === "string" ? document.createTextNode(x) : x); });
+    else e.appendChild(typeof c === "string" || typeof c === "number" ? document.createTextNode(String(c)) : c);
+  }
+  return e;
+}
+var SVGNS = "http://www.w3.org/2000/svg";
+function sv(tag, attrs) {
+  var e = document.createElementNS(SVGNS, tag);
+  if (attrs) for (var k in attrs) if (attrs[k] != null) {
+    if (k === "text") e.textContent = attrs[k]; else e.setAttribute(k, attrs[k]);
+  }
+  return e;
+}
+function clear(el) { while (el.firstChild) el.removeChild(el.firstChild); return el; }
+var NF;
+function setLocale() {
+  NF = new Intl.NumberFormat(LANG === "en" ? "en-US" : "zh-CN");
+  document.documentElement.lang = LANG === "en" ? "en" : "zh-CN";
+  if (typeof SV_NAMES !== "undefined") SV_NAMES.OTHER = LANG === "en" ? "Other" : "其他";
+}
+setLocale();
+function fmtInt(x) { return x == null ? "–" : NF.format(Math.round(x)); }
+function fmtNum(x, d) {
+  if (x == null || isNaN(x)) return "–";
+  if (d == null) d = Math.abs(x) >= 100 ? 0 : Math.abs(x) >= 10 ? 1 : 2;
+  return Number(x).toLocaleString(LANG === "en" ? "en-US" : "zh-CN", { minimumFractionDigits: 0, maximumFractionDigits: d });
+}
+function fmtPct(f, d) { return f == null ? "–" : fmtNum(f * 100, d == null ? 0 : d) + "%"; }
+function fmtBp(bp) {
+  if (bp == null) return "–";
+  var a = Math.abs(bp);
+  if (a >= 1e6) return fmtNum(bp / 1e6, a >= 1e8 ? 0 : 1) + " Mb";
+  if (a >= 1e3) return fmtNum(bp / 1e3, a >= 1e5 ? 0 : 1) + " kb";
+  return fmtInt(bp) + " bp";
+}
+function fmtCompact(x) {
+  if (x == null) return "–";
+  var a = Math.abs(x);
+  if (a >= 1e6) return fmtNum(x / 1e6, 1) + "M";
+  if (a >= 1e4) return fmtNum(x / 1e3, 1) + "K";
+  return fmtInt(x);
+}
+function cssv(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+function debounce(fn, ms) { var id; return function () { clearTimeout(id); id = setTimeout(fn, ms); }; }
+function niceStep(range, target) {
+  if (!(range > 0)) return 1;
+  var raw = range / target, mag = Math.pow(10, Math.floor(Math.log10(raw))), n = raw / mag;
+  return (n < 1.5 ? 1 : n < 3 ? 2 : n < 7 ? 5 : 10) * mag;
+}
+function niceTicks(min, max, target) {
+  var step = niceStep(max - min, target || 5), out = [];
+  for (var v = Math.ceil(min / step) * step; v <= max + step * 1e-9; v += step) out.push(+v.toPrecision(12));
+  return out;
+}
+function median(arr) {
+  var a = arr.filter(function (x) { return x != null && !isNaN(x); }).sort(function (x, y) { return x - y; });
+  if (!a.length) return null;
+  var m = a.length >> 1;
+  return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
+}
+function naturalCmp(a, b) {
+  return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: "base" });
+}
+var measureCtx = document.createElement("canvas").getContext("2d");
+function textWidth(s, size) { measureCtx.font = (size || 12) + "px " + (COLORS.font || "system-ui"); return measureCtx.measureText(s).width; }
+function setupCanvas(cv, w, hgt) {
+  var dpr = window.devicePixelRatio || 1;
+  cv.width = Math.max(1, Math.round(w * dpr)); cv.height = Math.max(1, Math.round(hgt * dpr));
+  cv.style.width = w + "px"; cv.style.height = hgt + "px";
+  var ctx = cv.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.font = "11px " + cssv("--font");
+  return ctx;
+}
+function store(key, val) {
+  try { if (val === undefined) return window.localStorage.getItem(key); window.localStorage.setItem(key, val); } catch (e) { return null; }
+  return null;
+}
+
+/* ======================================================================= *
+ * tooltip
+ * ======================================================================= */
+var TIP = document.getElementById("tooltip");
+function showTip(x, y, title, rows) {
+  clear(TIP);
+  if (title) TIP.appendChild(h("div", { class: "tt-title", text: title }));
+  rows.forEach(function (r) {
+    var k = h("span", { class: "k" });
+    if (r.color) k.appendChild(h("span", { class: "sw line", style: "background:" + r.color }));
+    k.appendChild(document.createTextNode(r.k));
+    TIP.appendChild(h("div", { class: "tt-row" }, k, h("span", { class: "v", text: r.v })));
+  });
+  TIP.style.display = "block";
+  var bw = TIP.offsetWidth, bh = TIP.offsetHeight, vw = window.innerWidth, vh = window.innerHeight;
+  var left = x + 14, top = y + 14;
+  if (left + bw > vw - 8) left = Math.max(8, x - bw - 14);
+  if (top + bh > vh - 8) top = Math.max(8, y - bh - 14);
+  TIP.style.left = left + "px"; TIP.style.top = top + "px";
+}
+function hideTip() { TIP.style.display = "none"; }
+window.addEventListener("scroll", hideTip, { passive: true });
+
+/* ======================================================================= *
+ * genome coordinates
+ * ======================================================================= */
+var CH = D.chroms.map(function (c, i) { return { name: String(c[0]), len: c[1], i: i }; });
+var OFF = [], GLEN = 0;
+CH.forEach(function (c) { OFF.push(GLEN); GLEN += c.len; });
+function gpos(ci, p) { return OFF[ci] + p; }
+function chromAt(g) {
+  var lo = 0, hi = OFF.length - 1;
+  while (lo < hi) { var m = (lo + hi + 1) >> 1; if (OFF[m] <= g) lo = m; else hi = m - 1; }
+  return lo;
+}
+function chrLabel(ci) { var n = CH[ci].name; return /^(\d+|X|Y|MT)$/.test(n) ? "chr" + n : n; }
+function fmtLocus(g) { var ci = chromAt(g); return chrLabel(ci) + ":" + fmtInt(g - OFF[ci]); }
+function isSexChrom(ci) { return CH[ci].name === "X" || CH[ci].name === "Y"; }
+
+/* ======================================================================= *
+ * patients, attributes, derived data
+ * ======================================================================= */
+var P = D.patients;
+var PIDX = {}; P.forEach(function (p, i) { PIDX[p.id] = i; });
+var ATTR = D.attributes;
+var ATTR_BY = {}; ATTR.forEach(function (a) { ATTR_BY[a.key] = a; });
+var GROUP = D.meta.group_by && ATTR_BY[D.meta.group_by] ? ATTR_BY[D.meta.group_by] : null;
+var HAS_SEG = P.some(function (p) { return p.has.segments; });
+var HAS_SV = D.svs.length > 0;
+var HAS_PP = P.some(function (p) { return p.purity != null && p.ploidy != null; });
+var SVT = ["DEL", "DUP", "INV", "BND", "INS", "CNV", "OTHER"];
+var SV_NAMES = { DEL: "DEL", DUP: "DUP", INV: "INV", BND: "BND", INS: "INS", CNV: "CNV", OTHER: LANG === "en" ? "Other" : "其他" };
+setLocale();
+(function () { // unknown SV types fold into OTHER
+  D.svs.forEach(function (r) { if (SVT.indexOf(r[6]) < 0) { r.push(r[6]); r[6] = "OTHER"; } });
+})();
+var SV_PRESENT = SVT.filter(function (ty) { return D.svs.some(function (r) { return r[6] === ty; }); });
+var HAS_FILTER = D.svs.some(function (r) { return r[9] != null && r[9] !== ""; });
+var HAS_PASS = D.svs.some(function (r) { return String(r[9] || "").toUpperCase() === "PASS"; });
+var SVF = { pass: HAS_PASS, types: {} };
+SV_PRESENT.forEach(function (ty) { SVF.types[ty] = true; });
+function svKeep(r) {
+  if (SVF.pass && HAS_FILTER && String(r[9] || "").toUpperCase() !== "PASS") return false;
+  return SVF.types[r[6]] !== false;
+}
+var COLORS = {};
+function refreshColors() {
+  ["c1", "c2", "c3", "c4", "c5", "c6", "c7", "c8", "other", "ink", "ink-2", "muted", "grid", "axis", "surface", "surface-2", "page",
+   "ascat-major", "ascat-minor", "ascat-total", "ascat-rawminor", "ascat-seg", "ascat-point", "delly-seg", "delly-point",
+   "cn-homdel", "cn-loss", "cn-neutral", "cn-gain", "cn-amp", "cn-nodata", "freq-gain", "freq-loss", "accent"
+  ].forEach(function (k) { COLORS[k] = cssv("--" + k); });
+  COLORS.font = cssv("--font");
+}
+function svColor(ty) { var i = SVT.indexOf(ty); return i < 0 || ty === "OTHER" ? COLORS.other : COLORS["c" + (i + 1)]; }
+
+/* group colours: fixed order, three slots (scatter validates all-pairs for 3), rest = Other */
+var GROUP_SLOTS = {};
+var GROUP_CATS = [];
+if (GROUP) {
+  var gcount = {};
+  P.forEach(function (p) { var v = p.attrs[GROUP.key]; if (v != null) gcount[v] = (gcount[v] || 0) + 1; });
+  GROUP_CATS = Object.keys(gcount);
+  if (GROUP.order) GROUP_CATS.sort(function (a, b) { return GROUP.order.indexOf(a) - GROUP.order.indexOf(b); });
+  else GROUP_CATS.sort(function (a, b) { return gcount[b] - gcount[a] || naturalCmp(a, b); });
+  GROUP_CATS.slice(0, 3).forEach(function (c, i) { GROUP_SLOTS[c] = "c" + (i + 1); });
+}
+function groupColor(v) { return v != null && GROUP_SLOTS[v] ? COLORS[GROUP_SLOTS[v]] : COLORS.other; }
+function groupLabel(v) { return v == null ? t("missing") : GROUP_SLOTS[v] ? v : t("other"); }
+
+function baseline(p) { return p.ploidy ? Math.max(1, Math.floor(p.ploidy + 0.5)) : 2; }
+function baseFor(base, ci, p) { return p.sex === "XY" && isSexChrom(ci) ? Math.max(1, Math.floor(base / 2 + 0.5)) : base; }
+function cnState(total, base) {
+  if (total == null) return null;
+  var tt = Math.round(total);
+  if (tt === 0) return -2;
+  if (tt < base) return -1;
+  if (tt > 2 * base) return 2;
+  if (tt > base) return 1;
+  return 0;
+}
+var STATE_KEYS = { "-2": "homdel", "-1": "loss", "0": "neutral", "1": "gain", "2": "amp" };
+function stateColor(s) { return s == null ? COLORS["cn-nodata"] : COLORS["cn-" + STATE_KEYS[s]]; }
+
+/* per patient caches: segment arrays with genome coordinates; bins with genome coordinates */
+var SEGC = {};
+function segsOf(pid) {
+  if (SEGC[pid]) return SEGC[pid];
+  var raw = D.segments[pid];
+  if (!raw) return null;
+  var n = raw.length, gs = new Float64Array(n), ge = new Float64Array(n);
+  raw.forEach(function (s, i) { gs[i] = gpos(s[0], s[1]); ge[i] = gpos(s[0], s[2]); });
+  var allele = raw.every(function (s) { return s[3] != null && s[4] != null; });
+  var hasRaw = raw.some(function (s) { return s[5] != null || s[8] != null; });
+  var hasLogr = raw.some(function (s) { return s[9] != null; });
+  return (SEGC[pid] = { raw: raw, gs: gs, ge: ge, allele: allele, hasRaw: hasRaw, hasLogr: hasLogr });
+}
+function segAt(S, g) {
+  var lo = 0, hi = S.gs.length - 1, ans = -1;
+  while (lo <= hi) { var m = (lo + hi) >> 1; if (S.gs[m] <= g) { ans = m; lo = m + 1; } else hi = m - 1; }
+  return ans >= 0 && S.ge[ans] >= g ? ans : -1;
+}
+function segTotal(s) { return s[7] != null ? s[7] : (s[3] != null && s[4] != null ? s[3] + s[4] : null); }
+var BINC = {};
+function binsOf(pid) {
+  if (BINC[pid]) return BINC[pid];
+  var b = D.bins[pid];
+  if (!b) return null;
+  var n = b.c.length, g = new Float64Array(n);
+  for (var i = 0; i < n; i++) g[i] = gpos(b.c[i], b.p[i]);
+  return (BINC[pid] = { g: g, logr: b.logr, baf: b.baf, cn: b.cn, n: n });
+}
+function nearestIdx(arr, g) {
+  var lo = 0, hi = arr.length - 1;
+  if (hi < 0) return -1;
+  while (lo < hi) { var m = (lo + hi) >> 1; if (arr[m] < g) lo = m + 1; else hi = m; }
+  if (lo > 0 && Math.abs(arr[lo - 1] - g) < Math.abs(arr[lo] - g)) lo--;
+  return lo;
+}
+/* median of bin values inside each segment: the green line of Delly's rd.R and the
+   blue segmented values of ASCAT's ASPCF plot are drawn on the same scale as the dots */
+var SEGMED = {};
+function segMedians(pid, key) {
+  var ck = pid + "\u0000" + key;
+  if (SEGMED[ck]) return SEGMED[ck];
+  var S = segsOf(pid), B = binsOf(pid);
+  if (!S || !B || !B[key]) return null;
+  var out = new Array(S.raw.length), arr = B[key];
+  for (var i = 0; i < S.raw.length; i++) {
+    var lo = nearestIdx(B.g, S.gs[i]);
+    while (lo > 0 && B.g[lo - 1] >= S.gs[i]) lo--;
+    var vals = [];
+    for (var j = Math.max(0, lo); j < B.n && B.g[j] <= S.ge[i]; j++) if (B.g[j] >= S.gs[i] && arr[j] != null) vals.push(arr[j]);
+    out[i] = vals.length >= 3 ? median(vals) : null;
+  }
+  return (SEGMED[ck] = out);
+}
+var SV_BY = {};
+D.svs.forEach(function (r, i) { (SV_BY[r[0]] = SV_BY[r[0]] || []).push(i); });
+
+/* ======================================================================= *
+ * theme
+ * ======================================================================= */
+var themeBtn = document.getElementById("theme-btn");
+var THEME = store("shown-theme") || "auto";
+function applyTheme() {
+  if (THEME === "auto") document.documentElement.removeAttribute("data-theme");
+  else document.documentElement.setAttribute("data-theme", THEME);
+  themeBtn.textContent = t("theme_" + THEME);
+  refreshColors();
+}
+themeBtn.addEventListener("click", function () {
+  THEME = THEME === "auto" ? "light" : THEME === "light" ? "dark" : "auto";
+  store("shown-theme", THEME);
+  applyTheme();
+  invalidateAll();
+});
+if (window.matchMedia) {
+  var mq = window.matchMedia("(prefers-color-scheme: dark)");
+  var onMq = function () { if (THEME === "auto") { refreshColors(); invalidateAll(); } };
+  if (mq.addEventListener) mq.addEventListener("change", onMq); else if (mq.addListener) mq.addListener(onMq);
+}
+
+/* ======================================================================= *
+ * generic pieces: legend, tiles, sortable table
+ * ======================================================================= */
+function legend(items) {
+  return h("div", { class: "legend" }, items.map(function (it) {
+    return h("span", { class: "key" }, h("span", { class: "sw " + (it.shape || ""), style: "background:" + it.color }), it.label);
+  }));
+}
+function tile(label, value, note) {
+  return h("div", { class: "tile" }, h("div", { class: "label", text: label }), h("div", { class: "value", text: value }),
+    note ? h("div", { class: "note", text: note }) : null);
+}
+function card(title, sub) {
+  var c = h("div", { class: "card" });
+  if (title) c.appendChild(h("h2", { text: title }));
+  if (sub) c.appendChild(h("p", { class: "sub", text: sub }));
+  return c;
+}
+/* columns: [{label, get(row) -> value, fmt(value,row)?, num?}] */
+function dataTable(opts) {
+  var root = h("div");
+  var state = { sort: opts.sort || null, dir: opts.dir || 1, page: 0, q: "" };
+  var pageSize = opts.pageSize || 0;
+  var search = opts.search ? h("input", { type: "search", placeholder: t("search"), "aria-label": t("search") }) : null;
+  var bar = h("div", { class: "toolbar" }, search, opts.tools || null, h("span", { class: "spacer" }),
+    h("span", { class: "hint", id: null }));
+  var countEl = bar.lastChild;
+  var box = h("div", { class: "table-box" });
+  var pager = h("div", { class: "pager" });
+  root.appendChild(bar); root.appendChild(box); root.appendChild(pager);
+  function rowsNow() {
+    var rows = typeof opts.rows === "function" ? opts.rows() : opts.rows;
+    if (state.q) {
+      var q = state.q.toLowerCase();
+      rows = rows.filter(function (r) {
+        return opts.columns.some(function (c) {
+          var v = c.get(r); if (v == null) return false;
+          return String(c.fmt ? c.fmt(v, r) : v).toLowerCase().indexOf(q) >= 0;
+        });
+      });
+    }
+    if (state.sort != null) {
+      var col = opts.columns[state.sort], dir = state.dir;
+      rows = rows.slice().sort(function (a, b) {
+        var x = col.get(a), y = col.get(b);
+        if (x == null && y == null) return 0;
+        if (x == null) return 1;
+        if (y == null) return -1;
+        if (typeof x === "number" && typeof y === "number") return (x - y) * dir;
+        return naturalCmp(x, y) * dir;
+      });
+    }
+    return rows;
+  }
+  function render() {
+    var rows = rowsNow();
+    countEl.textContent = fmtInt(rows.length) + " " + t("rows");
+    var pages = pageSize ? Math.max(1, Math.ceil(rows.length / pageSize)) : 1;
+    if (state.page >= pages) state.page = pages - 1;
+    var shown = pageSize ? rows.slice(state.page * pageSize, (state.page + 1) * pageSize) : rows;
+    var thead = h("thead", null, h("tr", null, opts.columns.map(function (c, i) {
+      var th = h("th", { class: c.num ? "num" : null, scope: "col", tabindex: "0", text: c.label });
+      if (state.sort === i) th.setAttribute("aria-sort", state.dir > 0 ? "ascending" : "descending");
+      var go = function () { if (state.sort === i) state.dir = -state.dir; else { state.sort = i; state.dir = c.num ? -1 : 1; } render(); };
+      th.addEventListener("click", go);
+      th.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
+      return th;
+    })));
+    var tbody = h("tbody");
+    shown.forEach(function (r) {
+      var tr = h("tr", opts.onRow ? { tabindex: "0" } : null, opts.columns.map(function (c) {
+        var v = c.get(r);
+        return h("td", { class: c.num ? "num" : null, text: v == null ? "–" : c.fmt ? c.fmt(v, r) : String(v) });
+      }));
+      if (opts.onRow) {
+        tr.addEventListener("click", function () { opts.onRow(r); });
+        tr.addEventListener("keydown", function (e) { if (e.key === "Enter") opts.onRow(r); });
+      }
+      tbody.appendChild(tr);
+    });
+    clear(box).appendChild(h("table", { class: "data" }, thead, tbody));
+    clear(pager);
+    if (pageSize && pages > 1) {
+      pager.appendChild(h("button", { class: "btn", type: "button", text: t("prev"), disabled: state.page === 0 ? true : null,
+        onclick: function () { state.page--; render(); } }));
+      pager.appendChild(h("span", { text: (state.page + 1) + " / " + pages }));
+      pager.appendChild(h("button", { class: "btn", type: "button", text: t("next"), disabled: state.page >= pages - 1 ? true : null,
+        onclick: function () { state.page++; render(); } }));
+    }
+  }
+  if (search) search.addEventListener("input", debounce(function () { state.q = search.value.trim(); state.page = 0; render(); }, 150));
+  root.refresh = function () { state.page = 0; render(); };
+  render();
+  return root;
+}
+function attrFmt(a, v) {
+  if (v == null) return "–";
+  if (a.type === "numeric") return fmtNum(v) + (loc(a, "unit") ? " " + loc(a, "unit") : "");
+  return String(v);
+}
+
+/* ======================================================================= *
+ * SVG charts: bars, histogram, scatter, stacked columns
+ * ======================================================================= */
+function svgRoot(w, hgt, label) {
+  return sv("svg", { width: w, height: hgt, viewBox: "0 0 " + w + " " + hgt, role: "img", "aria-label": label || "" });
+}
+function roundedTopRect(x, y, w, hgt, r) {
+  r = Math.max(0, Math.min(r, w / 2, hgt));
+  return "M" + x + "," + (y + hgt) + "V" + (y + r) + "Q" + x + "," + y + " " + (x + r) + "," + y +
+    "H" + (x + w - r) + "Q" + (x + w) + "," + y + " " + (x + w) + "," + (y + r) + "V" + (y + hgt) + "Z";
+}
+function roundedRightRect(x, y, w, hgt, r) {
+  r = Math.max(0, Math.min(r, hgt / 2, w));
+  return "M" + x + "," + y + "H" + (x + w - r) + "Q" + (x + w) + "," + y + " " + (x + w) + "," + (y + r) +
+    "V" + (y + hgt - r) + "Q" + (x + w) + "," + (y + hgt) + " " + (x + w - r) + "," + (y + hgt) + "H" + x + "Z";
+}
+function hoverable(el, fn) {
+  el.addEventListener("pointermove", function (e) { fn(e); });
+  el.addEventListener("pointerleave", hideTip);
+  el.setAttribute("tabindex", "0");
+  el.addEventListener("focus", function () { var b = el.getBoundingClientRect(); fn({ clientX: b.right, clientY: b.top }); });
+  el.addEventListener("blur", hideTip);
+}
+/* horizontal bars for a categorical attribute: items [{label, value, color?}] */
+function hbars(container, items, total, opts) {
+  var w = container.clientWidth || 300;
+  var bar = 16, gap = 8;
+  var labW = Math.min(w * 0.42, Math.max.apply(null, items.map(function (it) { return textWidth(it.label, 12); }).concat([20])) + 8);
+  var valW = 64;
+  var hgt = items.length * (bar + gap);
+  var svg = svgRoot(w, hgt, opts && opts.label);
+  var max = Math.max.apply(null, items.map(function (it) { return it.value; }).concat([1]));
+  var plotW = Math.max(20, w - labW - valW);
+  items.forEach(function (it, i) {
+    var y = i * (bar + gap);
+    var lab = it.label.length > 24 ? it.label.slice(0, 23) + "…" : it.label;
+    svg.appendChild(sv("text", { x: labW - 8, y: y + bar / 2 + 4, "text-anchor": "end", "font-size": 12, fill: COLORS["ink-2"], text: lab }));
+    var bw = Math.max(2, it.value / max * plotW);
+    svg.appendChild(sv("path", { d: roundedRightRect(labW, y, bw, bar, 4), fill: it.color || COLORS.c1 }));
+    svg.appendChild(sv("text", { x: labW + bw + 6, y: y + bar / 2 + 4, "font-size": 12, fill: COLORS.ink, "font-variant-numeric": "tabular-nums",
+      text: fmtInt(it.value) + (total ? "  " + fmtPct(it.value / total) : "") }));
+    var hit = sv("rect", { x: 0, y: y - gap / 2, width: w, height: bar + gap, fill: "transparent" });
+    hoverable(hit, function (e) { showTip(e.clientX, e.clientY, opts && opts.title, [{ k: it.label, v: fmtInt(it.value) + (total ? " (" + fmtPct(it.value / total, 1) + ")" : ""), color: it.color || COLORS.c1 }]); });
+    svg.appendChild(hit);
+  });
+  container.appendChild(svg);
+}
+/* vertical columns for a histogram: bins [{x0, x1, n, label}] */
+function columns(container, bins, opts) {
+  var w = container.clientWidth || 300, hgt = opts.height || 150;
+  var m = { l: 36, r: 8, t: 8, b: 26 };
+  var svg = svgRoot(w, hgt, opts.label);
+  var max = Math.max.apply(null, bins.map(function (b) { return b.n; }).concat([1]));
+  var ticks = niceTicks(0, max, 3);
+  var top = Math.max(max, ticks[ticks.length - 1]);
+  var pw = w - m.l - m.r, ph = hgt - m.t - m.b;
+  var y = function (v) { return m.t + ph - v / top * ph; };
+  ticks.forEach(function (tv) {
+    svg.appendChild(sv("line", { x1: m.l, x2: w - m.r, y1: y(tv), y2: y(tv), stroke: tv === 0 ? COLORS.axis : COLORS.grid, "stroke-width": 1 }));
+    svg.appendChild(sv("text", { x: m.l - 6, y: y(tv) + 4, "text-anchor": "end", "font-size": 11, fill: COLORS.muted, text: fmtCompact(tv) }));
+  });
+  var slot = pw / bins.length, bw = Math.min(24, Math.max(1, slot - 2));
+  bins.forEach(function (b, i) {
+    var x = m.l + i * slot + (slot - bw) / 2;
+    if (b.n > 0) svg.appendChild(sv("path", { d: roundedTopRect(x, y(b.n), bw, y(0) - y(b.n), 4), fill: opts.color || COLORS.c1 }));
+    var hit = sv("rect", { x: m.l + i * slot, y: m.t, width: slot, height: ph, fill: "transparent" });
+    hoverable(hit, function (e) { showTip(e.clientX, e.clientY, opts.title, [{ k: b.label, v: fmtInt(b.n), color: opts.color || COLORS.c1 }]); });
+    svg.appendChild(hit);
+  });
+  var every = Math.max(1, Math.ceil(bins.length / Math.max(2, Math.floor(pw / 56))));
+  bins.forEach(function (b, i) {
+    if (i % every) return;
+    svg.appendChild(sv("text", { x: m.l + i * slot + slot / 2, y: hgt - 8, "text-anchor": "middle", "font-size": 11, fill: COLORS.muted, text: b.tick != null ? b.tick : b.label }));
+  });
+  container.appendChild(svg);
+}
+function histogramBins(values, target) {
+  var v = values.filter(function (x) { return x != null && !isNaN(x); });
+  if (!v.length) return [];
+  var min = Math.min.apply(null, v), max = Math.max.apply(null, v);
+  if (min === max) return [{ x0: min, x1: max, n: v.length, label: fmtNum(min), tick: fmtNum(min) }];
+  var step = niceStep(max - min, target || 10), start = Math.floor(min / step) * step;
+  var nb = Math.max(1, Math.ceil((max - start) / step + 1e-9));
+  if (start + nb * step <= max) nb++;
+  var bins = [];
+  for (var i = 0; i < nb; i++) {
+    var x0 = +(start + i * step).toPrecision(12), x1 = +(start + (i + 1) * step).toPrecision(12);
+    bins.push({ x0: x0, x1: x1, n: 0, label: fmtNum(x0) + " – " + fmtNum(x1), tick: fmtNum(x0) });
+  }
+  v.forEach(function (x) { var k = Math.min(nb - 1, Math.floor((x - start) / step)); bins[k].n++; });
+  return bins;
+}
+
+/* ======================================================================= *
+ * views
+ * ======================================================================= */
+var VIEWS = [
+  { id: "overview", show: true, render: renderOverview },
+  { id: "cn", show: HAS_SEG, render: renderCN },
+  { id: "sv", show: HAS_SV, render: renderSV },
+  { id: "patient", show: true, render: renderPatient },
+  { id: "data", show: true, render: renderData }
+];
+var ACTIVE = null, DIRTY = {};
+var tabsEl = document.getElementById("tabs");
+VIEWS.forEach(function (v) {
+  if (!v.show) return;
+  var b = h("button", { class: "tab", role: "tab", type: "button", id: "tab-" + v.id, "aria-controls": "view-" + v.id, "data-key": v.id, text: t(v.id) });
+  b.addEventListener("click", function () { go(v.id); });
+  tabsEl.appendChild(b);
+});
+function go(id, params) {
+  if (params) for (var k in params) ROUTE[k] = params[k];
+  ROUTE.tab = id;
+  VIEWS.forEach(function (v) {
+    var sec = document.getElementById("view-" + v.id), tab = document.getElementById("tab-" + v.id);
+    var on = v.id === id;
+    sec.classList.toggle("active", on);
+    if (tab) tab.setAttribute("aria-selected", on ? "true" : "false");
+  });
+  ACTIVE = id;
+  var view = VIEWS.filter(function (v) { return v.id === id; })[0];
+  if (DIRTY[id] !== false || params) { view.render(document.getElementById("view-" + id)); DIRTY[id] = false; }
+  hideTip();
+  writeRoute();
+}
+function invalidateAll() { VIEWS.forEach(function (v) { DIRTY[v.id] = true; }); if (ACTIVE) go(ACTIVE); }
+var ROUTE = {};
+function readRoute() {
+  (location.hash || "").replace(/^#/, "").split("&").forEach(function (kv) {
+    var i = kv.indexOf("="); if (i > 0) ROUTE[decodeURIComponent(kv.slice(0, i))] = decodeURIComponent(kv.slice(i + 1));
+  });
+}
+function writeRoute() {
+  var parts = ["tab=" + encodeURIComponent(ROUTE.tab || "overview")];
+  if (ROUTE.tab === "patient" && ROUTE.id) parts.push("id=" + encodeURIComponent(ROUTE.id));
+  try { history.replaceState(null, "", "#" + parts.join("&")); } catch (e) { /* file:// in some browsers */ }
+}
+function openPatient(pid) { PV.region = null; go("patient", { id: pid }); window.scrollTo(0, 0); }
+var lastWidth = 0;
+var onResize = debounce(function () {
+  var w = document.getElementById("main").clientWidth;
+  if (Math.abs(w - lastWidth) < 4) return;
+  lastWidth = w; invalidateAll();
+}, 200);
+if (window.ResizeObserver) new ResizeObserver(onResize).observe(document.getElementById("main"));
+else window.addEventListener("resize", onResize);
+
+/* --------------------------- overview --------------------------------- */
+function renderOverview(root) {
+  clear(root);
+  var withCN = P.filter(function (p) { return p.has.segments; }).length;
+  var tiles = h("div", { class: "tiles" });
+  tiles.appendChild(tile(t("n_patients"), fmtInt(P.length)));
+  if (HAS_SEG) tiles.appendChild(tile(t("with_cn"), fmtInt(withCN), fmtPct(withCN / P.length)));
+  if (HAS_SV) {
+    var pass = D.svs.filter(function (r) { return String(r[9] || "").toUpperCase() === "PASS"; }).length;
+    tiles.appendChild(tile(t("n_sv"), fmtCompact(D.svs.length), HAS_PASS ? "PASS " + fmtCompact(pass) : null));
+  }
+  var mp = median(P.map(function (p) { return p.purity; }));
+  if (mp != null) tiles.appendChild(tile(t("median_purity"), fmtPct(mp)));
+  var mpl = median(P.map(function (p) { return p.ploidy; }));
+  if (mpl != null) tiles.appendChild(tile(t("median_ploidy"), fmtNum(mpl, 2)));
+  var wg = P.filter(function (p) { return p.metrics.WGD !== undefined && p.metrics.WGD !== null; });
+  if (wg.length) {
+    var nw = wg.filter(function (p) { return p.metrics.WGD !== 0; }).length;
+    tiles.appendChild(tile(t("wgd_rate"), fmtPct(nw / wg.length), fmtInt(nw) + " / " + fmtInt(wg.length)));
+  }
+  root.appendChild(tiles);
+
+  var insights = loc(D.meta, "insights");
+  if (insights && insights.length) {
+    var ic = card(loc(D.meta, "insights_label") || t("insights"));
+    ic.firstChild.appendChild(h("span", { class: "badge", text: t("insights_note") }));
+    ic.appendChild(h("ul", { class: "insights" }, insights.map(function (s) { return h("li", { text: s }); })));
+    root.appendChild(ic);
+  }
+
+  var grid = h("div", { class: "grid2" });
+  if (HAS_PP) {
+    var c = card(t("purity_ploidy"), t("purity_ploidy_sub"));
+    grid.appendChild(c);
+    root.appendChild(grid);
+    scatterPP(c);
+  }
+  if (grid.childNodes.length && !grid.parentNode) root.appendChild(grid);
+
+  if (ATTR.length) {
+    var ac = h("div");
+    ac.appendChild(h("h2", { style: "font-size:15px;margin:8px 0 2px", text: t("attributes") }));
+    ac.appendChild(h("p", { class: "sub hint", style: "margin:0 0 10px", text: t("attributes_sub") }));
+    var ag = h("div", { class: "attr-grid" });
+    ac.appendChild(ag);
+    root.appendChild(ac);
+    ATTR.forEach(function (a) { attrCard(ag, a); });
+  }
+
+  var tc = card(t("patient_table"));
+  tc.style.marginTop = "16px";
+  root.appendChild(tc);
+  tc.appendChild(patientTable());
+}
+function attrCard(parent, a) {
+  var vals = P.map(function (p) { return p.attrs[a.key]; });
+  var present = vals.filter(function (v) { return v != null && v !== ""; });
+  var miss = vals.length - present.length;
+  var c = h("div", { class: "card" });
+  c.appendChild(h("h3", { text: lbl(a) + (loc(a, "unit") && lbl(a).indexOf(loc(a, "unit")) < 0 ? " (" + loc(a, "unit") + ")" : "") }));
+  var subBits = ["n = " + fmtInt(present.length)];
+  if (miss) subBits.push(t("missing") + " " + fmtInt(miss));
+  if (a.type === "numeric" && present.length) subBits.push(t("median") + " " + fmtNum(median(present)));
+  if (a.type === "date" && present.length) {
+    var sorted = present.slice().sort();
+    subBits.push(sorted[0] + " – " + sorted[sorted.length - 1]);
+  }
+  c.appendChild(h("p", { class: "sub", text: subBits.join(" · ") }));
+  if (loc(a, "description")) c.appendChild(h("p", { class: "hint", style: "margin:-6px 0 8px", text: loc(a, "description") }));
+  var box = h("div", { class: "chart" });
+  c.appendChild(box);
+  parent.appendChild(c);
+  if (!present.length) { box.appendChild(h("div", { class: "empty", text: t("none") })); return; }
+  if (a.type === "numeric") {
+    columns(box, histogramBins(present, 10), { title: lbl(a), label: lbl(a), height: 140 });
+  } else if (a.type === "date") {
+    var years = present.map(function (d) { return d.slice(0, 4); });
+    var span = +years.slice().sort()[years.length - 1] - +years.slice().sort()[0];
+    var keyOf = span >= 2 ? function (d) { return d.slice(0, 4); } : function (d) { return d.slice(0, 7); };
+    var cnt = {};
+    present.forEach(function (d) { var k = keyOf(d); cnt[k] = (cnt[k] || 0) + 1; });
+    var keys = Object.keys(cnt).sort();
+    columns(box, keys.map(function (k) { return { label: k, n: cnt[k], tick: k }; }), { title: lbl(a), label: lbl(a), height: 140 });
+  } else if (a.type === "text") {
+    var uniq = {};
+    present.forEach(function (v) { uniq[v] = (uniq[v] || 0) + 1; });
+    var top = Object.keys(uniq).sort(function (x, y) { return uniq[y] - uniq[x]; }).slice(0, 5);
+    box.appendChild(h("p", { class: "hint", text: fmtInt(Object.keys(uniq).length) + " " + t("unique_values") }));
+    box.appendChild(h("div", { class: "chips" }, top.map(function (v) { return h("span", { class: "chip", text: v.length > 30 ? v.slice(0, 29) + "…" : v }); })));
+  } else {
+    var counts = {};
+    present.forEach(function (v) { counts[v] = (counts[v] || 0) + 1; });
+    var keys2 = Object.keys(counts);
+    if (a.order) keys2.sort(function (x, y) {
+      var ix = a.order.indexOf(x), iy = a.order.indexOf(y);
+      return (ix < 0 ? 1e9 : ix) - (iy < 0 ? 1e9 : iy) || counts[y] - counts[x];
+    });
+    else keys2.sort(function (x, y) { return counts[y] - counts[x] || naturalCmp(x, y); });
+    var items = keys2.slice(0, 10).map(function (k) { return { label: k, value: counts[k] }; });
+    if (keys2.length > 10) {
+      var rest = keys2.slice(10).reduce(function (s, k) { return s + counts[k]; }, 0);
+      items.push({ label: t("other") + " (" + (keys2.length - 10) + ")", value: rest, color: COLORS.other });
+    }
+    if (miss) items.push({ label: t("missing"), value: miss, color: COLORS.other });
+    hbars(box, items, vals.length, { title: lbl(a), label: lbl(a) });
+  }
+}
+function scatterPP(c) {
+  var pts = P.filter(function (p) { return p.purity != null && p.ploidy != null; });
+  if (GROUP) {
+    var items = [];
+    GROUP_CATS.slice(0, 3).forEach(function (g) { items.push({ label: g, color: groupColor(g), shape: "dot" }); });
+    if (GROUP_CATS.length > 3 || pts.some(function (p) { return p.attrs[GROUP.key] == null; }))
+      items.push({ label: t("other"), color: COLORS.other, shape: "dot" });
+    var lg = legend(items);
+    lg.insertBefore(h("span", { style: "color:var(--muted)", text: lbl(GROUP) + ":" }), lg.firstChild);
+    c.appendChild(lg);
+  }
+  var box = h("div", { class: "chart" });
+  c.appendChild(box);
+  var w = box.clientWidth || 500, hgt = 300;
+  var m = { l: 58, r: 12, t: 10, b: 38 };
+  var xs = pts.map(function (p) { return p.ploidy; });
+  var x0 = Math.min(1.5, Math.floor(Math.min.apply(null, xs) * 2) / 2), x1 = Math.max(5.5, Math.ceil(Math.max.apply(null, xs) * 2) / 2);
+  var pw = w - m.l - m.r, ph = hgt - m.t - m.b;
+  var X = function (v) { return m.l + (v - x0) / (x1 - x0) * pw; }, Y = function (v) { return m.t + ph - v * ph; };
+  var svg = svgRoot(w, hgt, t("purity_ploidy"));
+  niceTicks(x0, x1, 6).forEach(function (v) {
+    svg.appendChild(sv("line", { x1: X(v), x2: X(v), y1: m.t, y2: m.t + ph, stroke: COLORS.grid }));
+    svg.appendChild(sv("text", { x: X(v), y: hgt - 20, "text-anchor": "middle", "font-size": 11, fill: COLORS.muted, text: fmtNum(v, 1) }));
+  });
+  [0, 0.25, 0.5, 0.75, 1].forEach(function (v) {
+    svg.appendChild(sv("line", { x1: m.l, x2: m.l + pw, y1: Y(v), y2: Y(v), stroke: v === 0 ? COLORS.axis : COLORS.grid }));
+    svg.appendChild(sv("text", { x: m.l - 6, y: Y(v) + 4, "text-anchor": "end", "font-size": 11, fill: COLORS.muted, text: fmtPct(v) }));
+  });
+  svg.appendChild(sv("text", { x: m.l + pw / 2, y: hgt - 4, "text-anchor": "middle", "font-size": 12, fill: COLORS["ink-2"], text: t("ploidy") }));
+  svg.appendChild(sv("text", { x: 12, y: m.t + ph / 2, "text-anchor": "middle", "font-size": 12, fill: COLORS["ink-2"], transform: "rotate(-90 12 " + (m.t + ph / 2) + ")", text: t("purity") }));
+  // paint "Other" first so the three named groups sit on top
+  pts.slice().sort(function (a, b) {
+    var ga = GROUP && GROUP_SLOTS[a.attrs[GROUP.key]] ? 1 : 0, gb = GROUP && GROUP_SLOTS[b.attrs[GROUP.key]] ? 1 : 0;
+    return ga - gb;
+  }).forEach(function (p) {
+    var col = GROUP ? groupColor(p.attrs[GROUP.key]) : COLORS.c1;
+    var g = sv("g", { style: "cursor:pointer" });
+    g.appendChild(sv("circle", { cx: X(p.ploidy), cy: Y(Math.min(1.05, p.purity)), r: 5, fill: col, stroke: COLORS.surface, "stroke-width": 2 }));
+    var hit = sv("circle", { cx: X(p.ploidy), cy: Y(Math.min(1.05, p.purity)), r: 12, fill: "transparent" });
+    g.appendChild(hit);
+    hoverable(g, function (e) {
+      var rows = [{ k: t("purity"), v: fmtPct(p.purity) }, { k: t("ploidy"), v: fmtNum(p.ploidy, 2) }];
+      if (p.goodness_of_fit != null) rows.push({ k: t("gof"), v: fmtNum(p.goodness_of_fit, 1) + "%" });
+      if (GROUP) rows.push({ k: lbl(GROUP), v: p.attrs[GROUP.key] == null ? t("missing") : String(p.attrs[GROUP.key]), color: col });
+      showTip(e.clientX, e.clientY, p.id, rows);
+    });
+    g.addEventListener("click", function () { openPatient(p.id); });
+    g.addEventListener("keydown", function (e) { if (e.key === "Enter") openPatient(p.id); });
+    svg.appendChild(g);
+  });
+  box.appendChild(svg);
+}
+function metricCols() {
+  var cols = [];
+  var has = function (k) { return P.some(function (p) { return p.metrics[k] != null; }); };
+  if (P.some(function (p) { return p.purity != null; })) cols.push({ label: t("purity"), num: true, get: function (p) { return p.purity; }, fmt: function (v) { return fmtPct(v); } });
+  if (P.some(function (p) { return p.ploidy != null; })) cols.push({ label: t("ploidy"), num: true, get: function (p) { return p.ploidy; }, fmt: function (v) { return fmtNum(v, 2); } });
+  if (P.some(function (p) { return p.goodness_of_fit != null; })) cols.push({ label: t("gof"), num: true, get: function (p) { return p.goodness_of_fit; }, fmt: function (v) { return fmtNum(v, 1) + "%"; } });
+  if (has("WGD")) cols.push({ label: "WGD", num: true, get: function (p) { var w = p.metrics.WGD; return w == null ? null : w === "1+" ? 2 : w; }, fmt: function (v, p) { return String(p.metrics.WGD) + (p.metrics.WGD_borderline ? " (" + t("borderline") + ")" : ""); } });
+  [["GI", "GI"], ["LOH", "LOH"], ["FGA", "FGA"]].forEach(function (kv) {
+    if (has(kv[0])) cols.push({ label: kv[1], num: true, get: function (p) { return p.metrics[kv[0]]; }, fmt: function (v) { return fmtPct(v); } });
+  });
+  if (has("n_segs")) cols.push({ label: t("n_segs"), num: true, get: function (p) { return p.metrics.n_segs; }, fmt: fmtInt });
+  if (has("n_sv")) cols.push({ label: "SV", num: true, get: function (p) { return p.metrics.n_sv; }, fmt: fmtInt });
+  return cols;
+}
+function patientTable() {
+  var cols = [{ label: "ID", get: function (p) { return p.id; } }];
+  ATTR.forEach(function (a) {
+    cols.push({ label: lbl(a), num: a.type === "numeric", get: function (p) { return p.attrs[a.key]; }, fmt: function (v) { return attrFmt(a, v); } });
+  });
+  cols = cols.concat(metricCols());
+  return dataTable({ columns: cols, rows: P, search: true, onRow: function (p) { openPatient(p.id); } });
+}
+
+/* --------------------------- cohort copy number ------------------------ */
+var CN_SORT = "group";
+var CNC = null; // cohort CN cache {nb, bs, states: {pid: Int8Array}}
+function cohortStates() {
+  if (CNC) return CNC;
+  var nb = 3000, bs = GLEN / nb, states = {};
+  P.forEach(function (p) {
+    var S = segsOf(p.id);
+    if (!S) return;
+    var arr = new Int8Array(nb).fill(127), base = baseline(p);
+    S.raw.forEach(function (s, i) {
+      var st = cnState(segTotal(s), baseFor(base, s[0], p));
+      if (st == null) return;
+      var b0 = Math.max(0, Math.floor(S.gs[i] / bs)), b1 = Math.min(nb - 1, Math.floor(S.ge[i] / bs));
+      for (var b = b0; b <= b1; b++) {
+        var mid = (b + 0.5) * bs;
+        if (mid >= S.gs[i] && mid <= S.ge[i]) arr[b] = st;
+        else if (b0 === b1) arr[b] = st;
+      }
+    });
+    states[p.id] = arr;
+  });
+  return (CNC = { nb: nb, bs: bs, states: states });
+}
+/* x scale over a genome domain, shared by canvas tracks */
+function xScale(w, ml, mr, g0, g1) {
+  var pw = w - ml - mr;
+  return { ml: ml, pw: pw, g0: g0, g1: g1, x: function (g) { return ml + (g - g0) / (g1 - g0) * pw; },
+    inv: function (x) { return g0 + (x - ml) / pw * (g1 - g0); } };
+}
+function drawChromGuides(ctx, xs, top, bottom, labels) {
+  ctx.strokeStyle = COLORS.grid; ctx.lineWidth = 1;
+  ctx.fillStyle = COLORS.muted; ctx.textAlign = "center"; ctx.textBaseline = "top";
+  ctx.font = "11px " + COLORS.font;
+  var lastLabelX = -1e9;
+  for (var ci = 0; ci < CH.length; ci++) {
+    var a = OFF[ci], b = OFF[ci] + CH[ci].len;
+    if (b < xs.g0 || a > xs.g1) continue;
+    var xa = xs.x(Math.max(a, xs.g0)), xb = xs.x(Math.min(b, xs.g1));
+    if (a >= xs.g0) { ctx.beginPath(); ctx.moveTo(Math.round(xa) + 0.5, top); ctx.lineTo(Math.round(xa) + 0.5, bottom); ctx.stroke(); }
+    if (labels) {
+      var mid = (xa + xb) / 2, name = CH[ci].name, tw = ctx.measureText(name).width;
+      if (xb - xa >= tw + 2 && mid - lastLabelX > tw + 4) { ctx.fillText(name, mid, top + 2); lastLabelX = mid; }
+    }
+  }
+  if (xs.g1 >= GLEN) { var xe = Math.round(xs.x(GLEN)) - 0.5; ctx.beginPath(); ctx.moveTo(xe, top); ctx.lineTo(xe, bottom); ctx.stroke(); }
+}
+function renderCN(root) {
+  clear(root);
+  var C = cohortStates();
+  var cpts = P.filter(function (p) { return C.states[p.id]; });
+  // frequency plot
+  var fc = card(t("cn_freq"), t("cn_freq_sub"));
+  fc.appendChild(legend([{ label: t("gain"), color: COLORS["freq-gain"] }, { label: t("loss"), color: COLORS["freq-loss"] }]));
+  var fbox = h("div", { class: "chart" });
+  fc.appendChild(fbox);
+  root.appendChild(fc);
+  var gainF = new Float32Array(C.nb), lossF = new Float32Array(C.nb), ampF = new Float32Array(C.nb), hdF = new Float32Array(C.nb), nF = new Int32Array(C.nb);
+  cpts.forEach(function (p) {
+    var a = C.states[p.id];
+    for (var b = 0; b < C.nb; b++) {
+      var s = a[b];
+      if (s === 127) continue;
+      nF[b]++;
+      if (s > 0) gainF[b]++;
+      if (s < 0) lossF[b]++;
+      if (s === 2) ampF[b]++;
+      if (s === -2) hdF[b]++;
+    }
+  });
+  var fw = fbox.clientWidth || 800, fh = 220;
+  var fcv = h("canvas", { role: "img", "aria-label": t("cn_freq") });
+  fbox.appendChild(fcv);
+  var cross = h("div", { class: "crosshair" });
+  fbox.appendChild(cross);
+  var fctx = setupCanvas(fcv, fw, fh);
+  var xs = xScale(fw, 44, 8, 0, GLEN);
+  var top = 18, bottom = fh - 6, mid = (top + bottom) / 2, half = (bottom - top) / 2;
+  fctx.strokeStyle = COLORS.grid;
+  [-1, -0.5, 0.5, 1].forEach(function (v) { var y = mid - v * half; fctx.beginPath(); fctx.moveTo(xs.ml, Math.round(y) + 0.5); fctx.lineTo(fw - 8, Math.round(y) + 0.5); fctx.stroke(); });
+  drawChromGuides(fctx, xs, 0, bottom, true);
+  for (var b = 0; b < C.nb; b++) {
+    if (!nF[b]) continue;
+    var xa = xs.x(b * C.bs), xb = xs.x((b + 1) * C.bs), wpx = Math.max(1, xb - xa + 0.3);
+    var gf = gainF[b] / nF[b], lf = lossF[b] / nF[b];
+    if (gf > 0) { fctx.fillStyle = COLORS["freq-gain"]; fctx.fillRect(xa, mid - gf * half, wpx, gf * half); }
+    if (lf > 0) { fctx.fillStyle = COLORS["freq-loss"]; fctx.fillRect(xa, mid, wpx, lf * half); }
+  }
+  fctx.strokeStyle = COLORS.axis; fctx.beginPath(); fctx.moveTo(xs.ml, Math.round(mid) + 0.5); fctx.lineTo(fw - 8, Math.round(mid) + 0.5); fctx.stroke();
+  fctx.fillStyle = COLORS.muted; fctx.textAlign = "right"; fctx.textBaseline = "middle";
+  [[1, "100%"], [0.5, "50%"], [0, "0"], [-0.5, "50%"], [-1, "100%"]].forEach(function (kv) { fctx.fillText(kv[1], xs.ml - 6, mid - kv[0] * half); });
+  fcv.addEventListener("pointermove", function (e) {
+    var r = fcv.getBoundingClientRect(), x = e.clientX - r.left;
+    if (x < xs.ml || x > fw - 8) { hideTip(); cross.style.display = "none"; return; }
+    var g = xs.inv(x), bb = Math.min(C.nb - 1, Math.floor(g / C.bs));
+    cross.style.display = "block"; cross.style.left = x + "px";
+    var n = nF[bb] || 0;
+    showTip(e.clientX, e.clientY, fmtLocus(bb * C.bs) + " – " + fmtInt((bb + 1) * C.bs - OFF[chromAt(bb * C.bs)]), n ? [
+      { k: t("gain"), v: fmtPct(gainF[bb] / n), color: COLORS["freq-gain"] },
+      { k: t("amp"), v: fmtPct(ampF[bb] / n), color: COLORS["cn-amp"] },
+      { k: t("loss"), v: fmtPct(lossF[bb] / n), color: COLORS["freq-loss"] },
+      { k: t("homdel"), v: fmtPct(hdF[bb] / n), color: COLORS["cn-homdel"] },
+      { k: "n", v: fmtInt(n) }] : [{ k: t("nodata"), v: "" }]);
+  });
+  fcv.addEventListener("pointerleave", function () { hideTip(); cross.style.display = "none"; });
+
+  // heatmap
+  var hc = card(t("cn_heat"), t("cn_heat_sub"));
+  var sortSel = h("select", { "aria-label": t("sort_by") },
+    GROUP ? h("option", { value: "group", text: t("sort_group") + (LANG === "zh" ? "（" + lbl(GROUP) + "）" : " (" + lbl(GROUP) + ")") }) : null,
+    P.some(function (p) { return p.metrics.GI != null || p.metrics.FGA != null; }) ? h("option", { value: "gi", text: t("sort_gi") }) : null,
+    h("option", { value: "id", text: t("sort_id") }));
+  if (!GROUP && CN_SORT === "group") CN_SORT = sortSel.options[0].value;
+  sortSel.value = CN_SORT;
+  sortSel.addEventListener("change", function () { CN_SORT = sortSel.value; renderCN(root); });
+  hc.appendChild(h("div", { class: "toolbar" }, h("label", null, t("sort_by"), sortSel)));
+  hc.appendChild(legend(["homdel", "loss", "neutral", "gain", "amp"].map(function (k) { return { label: t(k), color: COLORS["cn-" + k] }; })));
+  var hbox = h("div", { class: "chart" });
+  hc.appendChild(hbox);
+  root.appendChild(hc);
+  var score = function (p) { return p.metrics.GI != null ? p.metrics.GI : p.metrics.FGA != null ? p.metrics.FGA : -1; };
+  var rows = cpts.slice().sort(function (a, b) {
+    if (CN_SORT === "id") return naturalCmp(a.id, b.id);
+    if (CN_SORT === "group" && GROUP) {
+      var ga = a.attrs[GROUP.key], gb = b.attrs[GROUP.key];
+      var ia = GROUP_CATS.indexOf(ga), ib = GROUP_CATS.indexOf(gb);
+      if (ia !== ib) return (ia < 0 ? 1e9 : ia) - (ib < 0 ? 1e9 : ib);
+    }
+    return score(b) - score(a) || naturalCmp(a.id, b.id);
+  });
+  var hw = hbox.clientWidth || 800;
+  var rowH = Math.max(2, Math.min(16, Math.floor(620 / Math.max(1, rows.length))));
+  var showLabels = rowH >= 10;
+  var labW = showLabels ? Math.min(120, Math.max.apply(null, rows.map(function (p) { return textWidth(p.id, 11); })) + 10) : 0;
+  var strip = GROUP ? 8 : 0;
+  var ml = Math.max(44, labW + strip + 6);
+  var hh = 18 + rows.length * rowH + 4;
+  var hcv = h("canvas", { role: "img", "aria-label": t("cn_heat"), style: "cursor:pointer" });
+  hbox.appendChild(hcv);
+  var hcross = h("div", { class: "crosshair" });
+  hbox.appendChild(hcross);
+  var hctx = setupCanvas(hcv, hw, hh);
+  var hx = xScale(hw, ml, 8, 0, GLEN);
+  var pxBins = new Int32Array(Math.ceil(hx.pw));
+  for (var px = 0; px < pxBins.length; px++) pxBins[px] = Math.min(C.nb - 1, Math.floor(hx.inv(hx.ml + px + 0.5) / C.bs));
+  rows.forEach(function (p, ri) {
+    var a = C.states[p.id], y = 18 + ri * rowH, start = 0, cur = a[pxBins[0]];
+    for (var px2 = 1; px2 <= pxBins.length; px2++) {
+      var s = px2 < pxBins.length ? a[pxBins[px2]] : null;
+      if (px2 === pxBins.length || s !== cur) {
+        hctx.fillStyle = cur === 127 ? COLORS["cn-nodata"] : stateColor(cur);
+        hctx.fillRect(hx.ml + start, y, px2 - start, Math.max(1, rowH - (rowH >= 6 ? 1 : 0)));
+        start = px2; cur = s;
+      }
+    }
+    if (GROUP) { hctx.fillStyle = groupColor(p.attrs[GROUP.key]); hctx.fillRect(ml - strip - 3, y, strip, Math.max(1, rowH - (rowH >= 6 ? 1 : 0))); }
+    if (showLabels) {
+      hctx.fillStyle = COLORS["ink-2"]; hctx.textAlign = "right"; hctx.textBaseline = "middle"; hctx.font = "11px " + COLORS.font;
+      hctx.fillText(p.id, ml - strip - 7, y + rowH / 2);
+    }
+  });
+  drawChromGuides(hctx, hx, 0, hh - 4, true);
+  var hpick = function (e) {
+    var r = hcv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+    var ri = Math.floor((y - 18) / rowH);
+    if (ri < 0 || ri >= rows.length) return null;
+    return { p: rows[ri], x: x, g: x >= hx.ml ? hx.inv(x) : null };
+  };
+  hcv.addEventListener("pointermove", function (e) {
+    var k = hpick(e);
+    if (!k) { hideTip(); hcross.style.display = "none"; return; }
+    var tipRows = [];
+    if (GROUP) tipRows.push({ k: lbl(GROUP), v: groupLabel(k.p.attrs[GROUP.key]), color: groupColor(k.p.attrs[GROUP.key]) });
+    var title = k.p.id;
+    if (k.g != null && k.g <= GLEN) {
+      hcross.style.display = "block"; hcross.style.left = k.x + "px";
+      title += " · " + fmtLocus(k.g);
+      var S = segsOf(k.p.id), si = segAt(S, k.g);
+      if (si >= 0) {
+        var s = S.raw[si], st = cnState(segTotal(s), baseFor(baseline(k.p), s[0], k.p));
+        if (s[3] != null && s[4] != null) tipRows.push({ k: "nMajor + nMinor", v: s[3] + " + " + s[4] });
+        tipRows.push({ k: t("total"), v: fmtNum(segTotal(s), 2) });
+        tipRows.push({ k: t("state"), v: t(STATE_KEYS[st]), color: stateColor(st) });
+        tipRows.push({ k: t("segment"), v: fmtBp(s[2] - s[1] + 1) });
+      } else tipRows.push({ k: t("nodata"), v: "" });
+    } else hcross.style.display = "none";
+    showTip(e.clientX, e.clientY, title, tipRows);
+  });
+  hcv.addEventListener("pointerleave", function () { hideTip(); hcross.style.display = "none"; });
+  hcv.addEventListener("click", function (e) { var k = hpick(e); if (k) openPatient(k.p.id); });
+}
+
+/* --------------------------- cohort SVs -------------------------------- */
+function svFilterBar(onChange) {
+  var bar = h("div", { class: "toolbar" });
+  if (HAS_PASS) {
+    var cb = h("input", { type: "checkbox" });
+    cb.checked = SVF.pass;
+    cb.addEventListener("change", function () { SVF.pass = cb.checked; onChange(); });
+    bar.appendChild(h("label", null, cb, t("pass_only")));
+  }
+  SV_PRESENT.forEach(function (ty) {
+    var b = h("button", { class: "btn", type: "button", "aria-pressed": SVF.types[ty] ? "true" : "false" },
+      h("span", { class: "sw", style: "background:" + svColor(ty) + ";margin-right:6px" }), SV_NAMES[ty]);
+    b.addEventListener("click", function () { SVF.types[ty] = !SVF.types[ty]; b.setAttribute("aria-pressed", SVF.types[ty] ? "true" : "false"); onChange(); });
+    bar.appendChild(b);
+  });
+  return bar;
+}
+function svTypeLegend(types) { return legend(types.map(function (ty) { return { label: SV_NAMES[ty], color: svColor(ty) }; })); }
+function stackedColumns(container, groups, types, opts) {
+  // groups: [{label, counts:{type:n}, onClick?}]
+  var minSlot = opts.minSlot || 10;
+  var cw = container.clientWidth || 600;
+  var w = Math.max(cw, groups.length * minSlot + 52);
+  var hgt = opts.height || 220, m = { l: 44, r: 8, t: 8, b: opts.rotate ? 52 : 26 };
+  var totals = groups.map(function (g) { return types.reduce(function (s, ty) { return s + (g.counts[ty] || 0); }, 0); });
+  var max = Math.max.apply(null, totals.concat([1]));
+  var ticks = niceTicks(0, max, 4), topv = Math.max(max, ticks[ticks.length - 1]);
+  var pw = w - m.l - m.r, ph = hgt - m.t - m.b;
+  var Y = function (v) { return m.t + ph - v / topv * ph; };
+  var svg = svgRoot(w, hgt, opts.label);
+  ticks.forEach(function (tv) {
+    svg.appendChild(sv("line", { x1: m.l, x2: w - m.r, y1: Y(tv), y2: Y(tv), stroke: tv === 0 ? COLORS.axis : COLORS.grid }));
+    svg.appendChild(sv("text", { x: m.l - 6, y: Y(tv) + 4, "text-anchor": "end", "font-size": 11, fill: COLORS.muted, text: fmtCompact(tv) }));
+  });
+  var slot = pw / Math.max(1, groups.length), bw = Math.min(24, Math.max(2, slot - 2));
+  groups.forEach(function (g, i) {
+    var x = m.l + i * slot + (slot - bw) / 2, acc = 0;
+    var present = types.filter(function (ty) { return g.counts[ty]; });
+    present.forEach(function (ty, k) {
+      var n = g.counts[ty], y0 = Y(acc), y1 = Y(acc + n);
+      var hh = Math.max(0.5, y0 - y1 - (k < present.length - 1 ? 2 : 0));
+      var el = k === present.length - 1 ? sv("path", { d: roundedTopRect(x, y0 - hh, bw, hh, 4), fill: svColor(ty) })
+        : sv("rect", { x: x, y: y0 - hh, width: bw, height: hh, fill: svColor(ty) });
+      svg.appendChild(el);
+      acc += n;
+    });
+    var hit = sv("rect", { x: m.l + i * slot, y: m.t, width: slot, height: ph, fill: "transparent", style: g.onClick ? "cursor:pointer" : null });
+    hoverable(hit, function (e) {
+      var rows = present.map(function (ty) { return { k: SV_NAMES[ty], v: fmtInt(g.counts[ty]), color: svColor(ty) }; }).reverse();
+      rows.push({ k: LANG === "en" ? "Total" : "合计", v: fmtInt(totals[i]) });
+      showTip(e.clientX, e.clientY, g.label, rows);
+    });
+    if (g.onClick) { hit.addEventListener("click", g.onClick); hit.addEventListener("keydown", function (e) { if (e.key === "Enter") g.onClick(); }); }
+    svg.appendChild(hit);
+  });
+  var every = Math.max(1, Math.ceil(groups.length / Math.max(2, Math.floor(pw / (opts.rotate ? 14 : 34)))));
+  groups.forEach(function (g, i) {
+    if (i % every) return;
+    var cx = m.l + i * slot + slot / 2, ty = hgt - m.b + 14;
+    var lab = g.tick || g.label;
+    svg.appendChild(sv("text", opts.rotate ? { x: cx, y: ty, "text-anchor": "end", "font-size": 11, fill: COLORS.muted, transform: "rotate(-55 " + cx + " " + ty + ")", text: lab }
+      : { x: cx, y: ty, "text-anchor": "middle", "font-size": 11, fill: COLORS.muted, text: lab }));
+  });
+  var sc = h("div", { class: "scroll-x" });
+  sc.appendChild(svg);
+  container.appendChild(sc);
+}
+function renderSV(root) {
+  clear(root);
+  root.appendChild(svFilterBar(function () { DIRTY.patient = true; renderSV(root); }));
+  var rows = D.svs.filter(svKeep);
+  var types = SV_PRESENT.filter(function (ty) { return SVF.types[ty]; });
+  // per patient
+  var pc = card(t("sv_per_patient"), t("sv_per_patient_sub"));
+  pc.appendChild(svTypeLegend(types));
+  var pbox = h("div", { class: "chart" });
+  pc.appendChild(pbox);
+  root.appendChild(pc);
+  var byP = {};
+  rows.forEach(function (r) { var c = byP[r[0]] = byP[r[0]] || {}; c[r[6]] = (c[r[6]] || 0) + 1; });
+  var groups = Object.keys(byP).map(function (k) {
+    var p = P[+k];
+    return { label: p.id, counts: byP[k], onClick: function () { openPatient(p.id); } };
+  });
+  groups.sort(function (a, b) {
+    var sa = 0, sb = 0; for (var k in a.counts) sa += a.counts[k]; for (var k2 in b.counts) sb += b.counts[k2];
+    return sb - sa;
+  });
+  if (groups.length) stackedColumns(pbox, groups, types, { height: 240, rotate: true, minSlot: 12, label: t("sv_per_patient") });
+  else pbox.appendChild(h("div", { class: "empty", text: t("none") }));
+
+  var grid = h("div", { class: "grid2" });
+  root.appendChild(grid);
+  // size distribution (both cards go into the grid before drawing, so widths are final)
+  var sc = card(t("sv_size"), t("sv_size_sub"));
+  var sizeTypes = types.filter(function (ty) { return ty !== "BND" && ty !== "INS"; });
+  sc.appendChild(svTypeLegend(sizeTypes));
+  var sbox = h("div", { class: "chart" });
+  sc.appendChild(sbox);
+  grid.appendChild(sc);
+  var cc = card(t("sv_chrom"), t("sv_chrom_sub"));
+  cc.appendChild(svTypeLegend(types));
+  var cbox = h("div", { class: "chart" });
+  cc.appendChild(cbox);
+  grid.appendChild(cc);
+  var edges = [0, 100, 300, 1e3, 3e3, 1e4, 3e4, 1e5, 3e5, 1e6, 3e6, 1e7, 3e7, 1e8, Infinity];
+  var sgroups = edges.slice(0, -1).map(function (e0, i) {
+    var e1 = edges[i + 1];
+    return { label: (i === 0 ? "< " + fmtBp(e1) : e1 === Infinity ? "≥ " + fmtBp(e0) : fmtBp(e0) + " – " + fmtBp(e1)), tick: i === 0 ? "<100" : e1 === Infinity ? "≥100M" : fmtBp(e0).replace(" ", ""), counts: {} };
+  });
+  rows.forEach(function (r) {
+    if (r[6] === "BND" || r[6] === "INS" || r[7] == null) return;
+    for (var i = 0; i < edges.length - 1; i++) if (r[7] >= edges[i] && r[7] < edges[i + 1]) { var c = sgroups[i].counts; c[r[6]] = (c[r[6]] || 0) + 1; break; }
+  });
+  stackedColumns(sbox, sgroups, sizeTypes, { height: 220, rotate: true, minSlot: 20, label: t("sv_size") });
+  // per chromosome
+  var cg = CH.map(function (c) { return { label: chrLabel(c.i), tick: c.name, counts: {} }; });
+  rows.forEach(function (r) { var c = cg[r[1]].counts; c[r[6]] = (c[r[6]] || 0) + 1; });
+  stackedColumns(cbox, cg, types, { height: 220, minSlot: 14, label: t("sv_chrom") });
+  // table
+  var tc = card(t("sv_table"));
+  root.appendChild(tc);
+  tc.appendChild(svTable(function () { return D.svs.filter(svKeep); }, true));
+}
+function svTable(rowsFn, withPatient) {
+  var cols = [];
+  if (withPatient) cols.push({ label: LANG === "en" ? "Patient" : "患者", get: function (r) { return P[r[0]].id; } });
+  cols.push({ label: "ID", get: function (r) { return r[13]; } });
+  cols.push({ label: t("type"), get: function (r) { return r[6] === "OTHER" && r.length > 16 + D.sv_extra.length ? r[r.length - 1] : r[6]; } });
+  cols.push({ label: t("position"), get: function (r) { return gpos(r[1], r[2]); }, fmt: function (v, r) { return chrLabel(r[1]) + ":" + fmtInt(r[2]); } });
+  cols.push({ label: t("partner"), get: function (r) { return r[4] != null && r[4] !== r[1] ? gpos(r[4], r[5] || 0) : r[3] != null ? gpos(r[1], r[3]) : null; },
+    fmt: function (v, r) { return r[4] != null && r[4] !== r[1] ? chrLabel(r[4]) + ":" + fmtInt(r[5]) : chrLabel(r[1]) + ":" + fmtInt(r[3]); } });
+  cols.push({ label: t("size"), num: true, get: function (r) { return r[7]; }, fmt: fmtBp });
+  var has = function (i) { return D.svs.some(function (r) { return r[i] != null && r[i] !== ""; }); };
+  if (has(8)) cols.push({ label: "QUAL", num: true, get: function (r) { return r[8]; }, fmt: function (v) { return fmtNum(v); } });
+  if (has(9)) cols.push({ label: "FILTER", get: function (r) { return r[9]; } });
+  if (has(10)) cols.push({ label: "PE", num: true, get: function (r) { return r[10]; }, fmt: fmtInt });
+  if (has(11)) cols.push({ label: "SR", num: true, get: function (r) { return r[11]; }, fmt: fmtInt });
+  if (has(12)) cols.push({ label: "GT", get: function (r) { return r[12]; } });
+  if (has(14)) cols.push({ label: LANG === "en" ? "Precision" : "精确度", get: function (r) { return r[14]; } });
+  if (has(15)) cols.push({ label: "CN", num: true, get: function (r) { return r[15]; }, fmt: function (v) { return fmtNum(v, 2); } });
+  D.sv_extra.forEach(function (name, j) { cols.push({ label: name, get: function (r) { var v = r[16 + j]; return v === "" ? null : v; } }); });
+  return dataTable({ columns: cols, rows: rowsFn, search: true, pageSize: 100 });
+}
+
+/* --------------------------- patient view ------------------------------ */
+var PV = { region: null, mode: "rounded" };
+function renderPatient(root) {
+  clear(root);
+  var pid = ROUTE.id && PIDX[ROUTE.id] != null ? ROUTE.id : (P.filter(function (p) { return p.has.segments || p.has.bins || p.has.variants; })[0] || P[0]).id;
+  ROUTE.id = pid;
+  var p = P[PIDX[pid]];
+  var sel = h("select", { "aria-label": t("select_patient") }, P.map(function (q) { return h("option", { value: q.id, text: q.id }); }));
+  sel.value = pid;
+  sel.addEventListener("change", function () { openPatient(sel.value); });
+  var idx = PIDX[pid];
+  var prev = h("button", { class: "btn", type: "button", text: "‹", "aria-label": t("prev"), disabled: idx === 0 ? true : null, onclick: function () { openPatient(P[idx - 1].id); } });
+  var next = h("button", { class: "btn", type: "button", text: "›", "aria-label": t("next"), disabled: idx === P.length - 1 ? true : null, onclick: function () { openPatient(P[idx + 1].id); } });
+  root.appendChild(h("div", { class: "toolbar" }, h("label", null, t("select_patient"), sel), prev, next));
+
+  // header card
+  var hc = card();
+  hc.appendChild(h("h2", { style: "font-size:18px", text: p.id }));
+  if (p.purity != null || p.ploidy != null) {
+    // the exact title line ASCAT prints above its profiles
+    var line = "Ploidy: " + (p.ploidy != null ? p.ploidy.toFixed(2) : "NA") + ", purity: " + (p.purity != null ? Math.round(p.purity * 100) + "%" : "NA") +
+      (p.goodness_of_fit != null ? ", goodness of fit: " + p.goodness_of_fit.toFixed(1) + "%" : "");
+    hc.appendChild(h("p", { class: "sub", style: "font-variant-numeric:tabular-nums", text: line + (p.ploidy_source === "segments" ? (LANG === "en" ? "  (ploidy derived from segments)" : "（倍性由片段推算）") : "") }));
+  }
+  var chips = h("div", { class: "chips" });
+  ATTR.forEach(function (a) {
+    var v = p.attrs[a.key];
+    if (v == null) return;
+    chips.appendChild(h("span", { class: "chip" }, lbl(a) + ": ", h("b", { text: attrFmt(a, v) })));
+  });
+  var m = p.metrics;
+  if (m.WGD != null) chips.appendChild(h("span", { class: "chip" }, "WGD: ", h("b", { text: String(m.WGD) + (m.WGD_borderline ? " (" + t("borderline") + ")" : "") })));
+  [["GI", "GI"], ["LOH", "LOH"], ["FGA", "FGA"], ["homdel_fraction", LANG === "en" ? "HomDel" : "纯合缺失"]].forEach(function (kv) {
+    if (m[kv[0]] != null) chips.appendChild(h("span", { class: "chip" }, kv[1] + ": ", h("b", { text: fmtPct(m[kv[0]], 1) })));
+  });
+  if (m.n_segs != null) chips.appendChild(h("span", { class: "chip" }, t("n_segs") + ": ", h("b", { text: fmtInt(m.n_segs) })));
+  if (m.n_sv != null) chips.appendChild(h("span", { class: "chip" }, "SV: ", h("b", { text: fmtInt(m.n_sv) + (m.n_sv_pass != null && HAS_PASS ? " (PASS " + fmtInt(m.n_sv_pass) + ")" : "") })));
+  hc.appendChild(chips);
+  root.appendChild(hc);
+
+  var S = segsOf(pid), B = binsOf(pid), svIdx = SV_BY[idx] || [];
+  if (!S && !B && !svIdx.length) { root.appendChild(h("div", { class: "card empty", text: t("no_genomic") })); return; }
+
+  var tc = card();
+  var regionSel = h("select", { "aria-label": t("chrom") }, h("option", { value: "", text: t("whole_genome") }),
+    CH.map(function (c) { return h("option", { value: String(c.i), text: chrLabel(c.i) }); }));
+  var bar = h("div", { class: "toolbar" }, h("label", null, t("chrom"), regionSel));
+  if (S && S.allele && S.hasRaw) {
+    var bRound = h("button", { class: "btn", type: "button", text: t("rounded"), "aria-pressed": PV.mode === "rounded" ? "true" : "false" });
+    var bRaw = h("button", { class: "btn", type: "button", text: t("raw"), "aria-pressed": PV.mode === "raw" ? "true" : "false" });
+    bRound.addEventListener("click", function () { PV.mode = "rounded"; renderPatient(root); });
+    bRaw.addEventListener("click", function () { PV.mode = "raw"; renderPatient(root); });
+    bar.appendChild(bRound); bar.appendChild(bRaw);
+  }
+  if (svIdx.length && HAS_PASS) {
+    var cb = h("input", { type: "checkbox" }); cb.checked = SVF.pass;
+    cb.addEventListener("change", function () { SVF.pass = cb.checked; DIRTY.sv = true; renderPatient(root); });
+    bar.appendChild(h("label", null, cb, t("pass_only")));
+  }
+  bar.appendChild(h("span", { class: "spacer" }));
+  bar.appendChild(h("span", { class: "hint", text: t("drag_zoom") }));
+  tc.appendChild(bar);
+  root.appendChild(tc);
+  var region = PV.region || [0, GLEN];
+  var single = -1;
+  CH.forEach(function (c) { if (region[0] === OFF[c.i] && region[1] === OFF[c.i] + c.len) single = c.i; });
+  regionSel.value = single >= 0 ? String(single) : "";
+  regionSel.addEventListener("change", function () {
+    var v = regionSel.value;
+    PV.region = v === "" ? null : [OFF[+v], OFF[+v] + CH[+v].len];
+    renderPatient(root);
+  });
+  var tracksEl = h("div");
+  tc.appendChild(tracksEl);
+  buildTracks(tracksEl, p, S, B, svIdx, region, function (r) { PV.region = r; renderPatient(root); });
+
+  // tables
+  if (S) {
+    var sd = h("details");
+    sd.appendChild(h("summary", { text: t("segments_table") + " (" + fmtInt(S.raw.length) + ")" }));
+    var segCols = [
+      { label: t("chrom"), get: function (s) { return s[0]; }, fmt: function (v) { return chrLabel(v); } },
+      { label: t("start"), num: true, get: function (s) { return s[1]; }, fmt: fmtInt },
+      { label: t("end"), num: true, get: function (s) { return s[2]; }, fmt: fmtInt },
+      { label: t("size"), num: true, get: function (s) { return s[2] - s[1] + 1; }, fmt: fmtBp }];
+    if (S.allele) segCols.push({ label: "nMajor", num: true, get: function (s) { return s[3]; } }, { label: "nMinor", num: true, get: function (s) { return s[4]; } });
+    segCols.push({ label: t("total"), num: true, get: function (s) { return segTotal(s); }, fmt: function (v) { return fmtNum(v, 2); } });
+    if (S.raw.some(function (s) { return s[5] != null; })) segCols.push({ label: "nAraw", num: true, get: function (s) { return s[5]; }, fmt: function (v) { return fmtNum(v, 3); } }, { label: "nBraw", num: true, get: function (s) { return s[6]; }, fmt: function (v) { return fmtNum(v, 3); } });
+    if (S.hasLogr) segCols.push({ label: "LogR", num: true, get: function (s) { return s[9]; }, fmt: function (v) { return fmtNum(v, 3); } });
+    segCols.push({ label: t("state"), get: function (s) { var st = cnState(segTotal(s), baseFor(baseline(p), s[0], p)); return st == null ? null : t(STATE_KEYS[st]); } });
+    sd.appendChild(dataTable({ columns: segCols, rows: S.raw, search: true, pageSize: 200 }));
+    root.appendChild(h("div", { class: "card" }, sd));
+  }
+  if (svIdx.length) {
+    var vd = h("details");
+    vd.appendChild(h("summary", { text: t("patient_svs") + " (" + fmtInt(svIdx.length) + ")" }));
+    vd.appendChild(svTable(function () { return svIdx.map(function (i) { return D.svs[i]; }).filter(svKeep); }, false));
+    root.appendChild(h("div", { class: "card" }, vd));
+  }
+}
+
+function buildTracks(container, p, S, B, svIdx, region, setRegion) {
+  var W = container.clientWidth || 800;
+  var ML = 48, MR = 8;
+  var xs = xScale(W, ML, MR, region[0], region[1]);
+  var ylim = D.meta.y_limit || 5;
+  var tracks = [];
+  var svRows = svIdx.map(function (i) { return D.svs[i]; }).filter(svKeep);
+  var cnvCalls = svRows.filter(function (r) { return r[6] === "CNV" && r[15] != null && r[3] != null; });
+  var base = baseline(p);
+
+  // axis strip (chromosome labels or Mb ticks); click a chromosome to zoom
+  var axisWrap = h("div", { class: "track axis-strip" });
+  var acv = h("canvas", { role: "img", "aria-label": t("chrom") });
+  axisWrap.appendChild(acv);
+  container.appendChild(axisWrap);
+  var actx = setupCanvas(acv, W, 22);
+  var within = chromAt(region[0]) === chromAt(Math.max(region[0], region[1] - 1));
+  if (!within) drawChromGuides(actx, xs, 2, 22, true);
+  else {
+    var ci0 = chromAt(region[0]);
+    var ticks = niceTicks(region[0] - OFF[ci0], region[1] - OFF[ci0], Math.max(2, Math.floor(xs.pw / 90)));
+    actx.fillStyle = COLORS.muted; actx.textAlign = "center"; actx.textBaseline = "top"; actx.strokeStyle = COLORS.axis;
+    ticks.forEach(function (tv) {
+      var x = xs.x(OFF[ci0] + tv);
+      if (x < ML - 1 || x > W - MR + 1) return;
+      actx.beginPath(); actx.moveTo(Math.round(x) + 0.5, 16); actx.lineTo(Math.round(x) + 0.5, 22); actx.stroke();
+      actx.fillText(fmtBp(tv), x, 2);
+    });
+    actx.textAlign = "left"; actx.fillStyle = COLORS["ink-2"]; actx.fillText(chrLabel(ci0), 2, 2);
+  }
+  acv.addEventListener("click", function (e) {
+    var r = acv.getBoundingClientRect(), g = xs.inv(e.clientX - r.left);
+    if (g < 0 || g > GLEN) return;
+    var ci = chromAt(g);
+    if (!within) setRegion([OFF[ci], OFF[ci] + CH[ci].len]);
+  });
+
+  function addTrack(title, legendItems, height, draw, hover) {
+    var wrap = h("div", { class: "track" });
+    var head = h("div", { class: "track-head" }, h("h3", { text: title }), legendItems ? legend(legendItems) : null);
+    if (legendItems) head.lastChild.style.margin = "0";
+    wrap.appendChild(head);
+    var holder = h("div", { style: "position:relative" });
+    var cv = h("canvas", { role: "img", "aria-label": title });
+    var ch = h("div", { class: "crosshair" }), br = h("div", { class: "brush" });
+    holder.appendChild(cv); holder.appendChild(ch); holder.appendChild(br);
+    wrap.appendChild(holder);
+    container.appendChild(wrap);
+    var ctx = setupCanvas(cv, W, height);
+    var tr = { cv: cv, ctx: ctx, ch: ch, br: br, h: height, hover: hover };
+    // draw() paints its y axis first, then calls clip() so data stays inside the plot area
+    ctx.save();
+    draw(ctx, height, function () { ctx.beginPath(); ctx.rect(ML, 0, xs.pw, height); ctx.clip(); });
+    ctx.restore();
+    drawChromGuides(ctx, xs, 0, height, false);
+    tracks.push(tr);
+    return tr;
+  }
+  function yAxis(ctx, height, lo, hi, ticks, fmt, pad) {
+    pad = pad || 6;
+    var Y = function (v) { return pad + (hi - v) / (hi - lo) * (height - 2 * pad); };
+    ctx.font = "11px " + COLORS.font; ctx.textAlign = "right"; ctx.textBaseline = "middle";
+    ticks.forEach(function (tv) {
+      var y = Math.round(Y(tv)) + 0.5;
+      ctx.strokeStyle = COLORS.grid; ctx.beginPath(); ctx.moveTo(ML, y); ctx.lineTo(W - MR, y); ctx.stroke();
+      ctx.fillStyle = COLORS.muted; ctx.fillText(fmt ? fmt(tv) : String(tv), ML - 6, y);
+    });
+    return Y;
+  }
+  function inView(g) { return g >= region[0] && g <= region[1]; }
+  function drawPoints(ctx, arr, Y, lo, hi, color) {
+    if (!B || !arr) return;
+    ctx.fillStyle = color;
+    var lo0 = nearestIdx(B.g, region[0]), hi0 = nearestIdx(B.g, region[1]);
+    var dense = (hi0 - lo0) > 6000;
+    var sz = dense ? 1.4 : 2.2;
+    for (var i = 0; i < B.n; i++) {
+      var v = arr[i];
+      if (v == null || !inView(B.g[i])) continue;
+      var vv = v < lo ? lo : v > hi ? hi : v;
+      ctx.fillRect(xs.x(B.g[i]) - sz / 2, Y(vv) - sz / 2, sz, sz);
+    }
+  }
+  function segLine(ctx, gs, ge, y, color, thick) {
+    var xa = xs.x(gs), xb = xs.x(ge);
+    if (xb < ML || xa > W - MR) return;
+    ctx.fillStyle = color;
+    ctx.fillRect(xa, y - thick / 2, Math.max(1, xb - xa), thick);
+  }
+
+  // 1. ASCAT profile
+  if (S) {
+    var raw = PV.mode === "raw" && S.allele && S.hasRaw;
+    var leg = S.allele ? (raw ? [{ label: t("total_raw"), color: COLORS["ascat-total"] }, { label: t("minor_raw"), color: COLORS["ascat-rawminor"] }]
+      : [{ label: t("major"), color: COLORS["ascat-major"] }, { label: t("minor"), color: COLORS["ascat-minor"] }])
+      : [{ label: t("total"), color: COLORS["ascat-total"] }];
+    addTrack(t("track_profile"), leg, 170, function (ctx, height, clip) {
+      var Y = yAxis(ctx, height, -0.25, ylim + 0.35, niceTicks(0, ylim, ylim), null, 4);
+      clip();
+      var thick = Math.max(3, Math.abs(Y(0) - Y(0.14)));
+      S.raw.forEach(function (s, i) {
+        var a, b, ca, cb;
+        if (S.allele && !raw) { a = s[3] - 0.1; b = s[4] + 0.1; ca = COLORS["ascat-major"]; cb = COLORS["ascat-minor"];
+          if (s[3] > ylim) a = ylim + 0.1; if (s[4] > ylim) b = ylim + 0.1; }
+        else if (S.allele && raw) {
+          a = s[8] != null ? s[8] : (s[5] != null && s[6] != null ? s[5] + s[6] : segTotal(s)); b = s[6] != null ? s[6] : s[4];
+          ca = COLORS["ascat-total"]; cb = COLORS["ascat-rawminor"];
+          if (a > ylim) a = ylim + 0.1; if (b > ylim) b = ylim + 0.1;
+        } else { a = segTotal(s); b = null; ca = COLORS["ascat-total"]; if (a > ylim) a = ylim + 0.1; }
+        if (a != null) { ctx.globalAlpha = a > ylim ? 0.6 : 1; segLine(ctx, S.gs[i], S.ge[i], Y(a), ca, thick); }
+        if (b != null) { ctx.globalAlpha = b > ylim ? 0.6 : 1; segLine(ctx, S.gs[i], S.ge[i], Y(b), cb, thick); }
+        ctx.globalAlpha = 1;
+      });
+    });
+  }
+  // 2. Delly read-depth copy number
+  var hasCnBins = B && B.cn;
+  if (hasCnBins || cnvCalls.length) {
+    var maxCn = 4;
+    if (hasCnBins) for (var i = 0; i < B.n; i++) if (B.cn[i] != null && B.cn[i] > maxCn) maxCn = B.cn[i];
+    var cnTop = Math.min(12, Math.ceil(maxCn + 0.5));
+    var leg2 = [];
+    if (hasCnBins) leg2.push({ label: t("cn_points"), color: COLORS["delly-point"], shape: "dot" });
+    leg2.push({ label: t("segments"), color: COLORS["delly-seg"], shape: "line" });
+    addTrack(t("track_rd"), leg2, 150, function (ctx, height, clip) {
+      var Y = yAxis(ctx, height, 0, cnTop, niceTicks(0, cnTop, 6), null, 6);
+      clip();
+      if (hasCnBins) drawPoints(ctx, B.cn, Y, 0, cnTop, COLORS["delly-point"]);
+      var med = hasCnBins ? segMedians(p.id, "cn") : null;
+      if (S) S.raw.forEach(function (s, i) {
+        var v = med ? med[i] : (s[8] != null ? s[8] : segTotal(s));
+        if (v != null) segLine(ctx, S.gs[i], S.ge[i], Y(Math.min(cnTop, v)), COLORS["delly-seg"], 2);
+      });
+      cnvCalls.forEach(function (r) { segLine(ctx, gpos(r[1], r[2]), gpos(r[1], r[3]), Y(Math.min(cnTop, r[15])), COLORS["delly-seg"], 3); });
+    });
+  }
+  // 3. LogR
+  if ((B && B.logr) || (S && S.hasLogr)) {
+    var leg3 = [];
+    if (B && B.logr) leg3.push({ label: t("raw_points"), color: COLORS["ascat-point"], shape: "dot" });
+    var logrMed = S && !S.hasLogr && B && B.logr ? segMedians(p.id, "logr") : null;
+    if ((S && S.hasLogr) || logrMed) leg3.push({ label: t("seg_logr"), color: COLORS["ascat-seg"], shape: "line" });
+    addTrack(t("track_logr"), leg3, 130, function (ctx, height, clip) {
+      var Y = yAxis(ctx, height, -2, 2, [-2, -1, 0, 1, 2], null, 6);
+      clip();
+      drawPoints(ctx, B && B.logr, Y, -2, 2, COLORS["ascat-point"]);
+      if (S && (S.hasLogr || logrMed)) S.raw.forEach(function (s, i) {
+        var v = S.hasLogr ? s[9] : logrMed[i];
+        if (v != null) segLine(ctx, S.gs[i], S.ge[i], Y(Math.max(-2, Math.min(2, v))), COLORS["ascat-seg"], 2);
+      });
+    });
+  }
+  // 4. BAF
+  var fitBaf = S && S.allele && p.purity != null;
+  if ((B && B.baf) || (S && S.raw.some(function (s) { return s[10] != null; }))) {
+    var leg4 = [];
+    if (B && B.baf) leg4.push({ label: t("raw_points"), color: COLORS["ascat-point"], shape: "dot" });
+    if (fitBaf) leg4.push({ label: t("fitted_baf"), color: COLORS["ascat-seg"], shape: "line" });
+    addTrack(t("track_baf"), leg4, 120, function (ctx, height, clip) {
+      var Y = yAxis(ctx, height, 0, 1, [0, 0.5, 1], function (v) { return fmtNum(v, 1); }, 6);
+      clip();
+      drawPoints(ctx, B && B.baf, Y, 0, 1, COLORS["ascat-point"]);
+      if (S) S.raw.forEach(function (s, i) {
+        var bv = null;
+        if (fitBaf && s[3] + s[4] > 0) { var rho = Math.min(1, p.purity); bv = (1 - rho + rho * s[4]) / (2 - 2 * rho + rho * (s[3] + s[4])); }
+        else if (s[10] != null) bv = s[10];
+        if (bv == null) return;
+        segLine(ctx, S.gs[i], S.ge[i], Y(bv), COLORS["ascat-seg"], 2);
+        segLine(ctx, S.gs[i], S.ge[i], Y(1 - bv), COLORS["ascat-seg"], 2);
+      });
+    });
+  }
+  // 5. SV arcs
+  var svVis = [];
+  if (svIdx.length) {
+    var typesHere = SV_PRESENT.filter(function (ty) { return svRows.some(function (r) { return r[6] === ty; }); });
+    addTrack(t("track_sv"), typesHere.map(function (ty) { return { label: SV_NAMES[ty], color: svColor(ty), shape: "line" }; }), 120, function (ctx, height, clip) {
+      clip();
+      var baseY = height - 6;
+      ctx.strokeStyle = COLORS.axis; ctx.beginPath(); ctx.moveTo(ML, baseY + 0.5); ctx.lineTo(W - MR, baseY + 0.5); ctx.stroke();
+      ctx.lineWidth = 1.5;
+      svRows.forEach(function (r) {
+        var g1 = gpos(r[1], r[2]);
+        var g2 = r[4] != null && r[4] !== r[1] ? gpos(r[4], r[5] || 0) : r[3] != null ? gpos(r[1], r[3]) : null;
+        var col = svColor(r[6]);
+        var x1 = xs.x(g1), in1 = inView(g1);
+        if (r[6] === "INS" || g2 == null) {
+          if (!in1) return;
+          ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(x1, baseY - 10); ctx.lineTo(x1 - 4, baseY - 2); ctx.lineTo(x1 + 4, baseY - 2); ctx.closePath(); ctx.fill();
+          svVis.push({ r: r, xs: [x1] });
+          return;
+        }
+        var x2 = xs.x(g2), in2 = inView(g2);
+        if (!in1 && !in2) return;
+        var size = Math.abs(g2 - g1);
+        var hgt = r[4] != null && r[4] !== r[1] ? (height - 16) : Math.max(8, Math.min(height - 16, (Math.log10(Math.max(10, size)) - 1) / 8 * (height - 16)));
+        ctx.strokeStyle = col; ctx.globalAlpha = 0.85;
+        if (in1 && in2) {
+          ctx.beginPath(); ctx.moveTo(x1, baseY); ctx.quadraticCurveTo((x1 + x2) / 2, baseY - 2 * hgt, x2, baseY); ctx.stroke();
+          if (Math.abs(x2 - x1) < 2) { ctx.beginPath(); ctx.moveTo(x1, baseY); ctx.lineTo(x1, baseY - hgt * 0.5); ctx.stroke(); }
+        } else {
+          var xi = in1 ? x1 : x2;
+          ctx.beginPath(); ctx.moveTo(xi, baseY); ctx.lineTo(xi, baseY - hgt * 0.7); ctx.stroke();
+          ctx.fillStyle = col; ctx.beginPath(); ctx.arc(xi, baseY - hgt * 0.7, 3, 0, 2 * Math.PI); ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+        svVis.push({ r: r, xs: [in1 ? x1 : null, in2 ? x2 : null] });
+      });
+      ctx.lineWidth = 1;
+    });
+  }
+
+  // shared crosshair + tooltip + brush zoom
+  function tipAt(x) {
+    var g = xs.inv(x), rows = [];
+    if (S) {
+      var si = segAt(S, g);
+      if (si >= 0) {
+        var s = S.raw[si];
+        if (s[3] != null && s[4] != null) rows.push({ k: "nMajor + nMinor", v: s[3] + " + " + s[4], color: COLORS["ascat-major"] });
+        if (s[5] != null && s[6] != null) rows.push({ k: "nAraw + nBraw", v: fmtNum(s[5], 2) + " + " + fmtNum(s[6], 2), color: COLORS["ascat-total"] });
+        else if (s[8] != null) rows.push({ k: t("total_raw"), v: fmtNum(s[8], 2), color: COLORS["ascat-total"] });
+        if (s[3] == null) rows.push({ k: t("total"), v: fmtNum(segTotal(s), 2), color: COLORS["ascat-total"] });
+        var st = cnState(segTotal(s), baseFor(base, s[0], p));
+        if (st != null) rows.push({ k: t("state"), v: t(STATE_KEYS[st]), color: stateColor(st) });
+        if (s[9] != null) rows.push({ k: t("seg_logr"), v: fmtNum(s[9], 3), color: COLORS["ascat-seg"] });
+        rows.push({ k: t("segment"), v: chrLabel(s[0]) + ":" + fmtInt(s[1]) + "–" + fmtInt(s[2]) + " (" + fmtBp(s[2] - s[1] + 1) + ")" });
+      }
+    }
+    if (B) {
+      var bi = nearestIdx(B.g, g);
+      if (bi >= 0 && Math.abs(xs.x(B.g[bi]) - x) <= 4) {
+        if (B.logr && B.logr[bi] != null) rows.push({ k: "LogR", v: fmtNum(B.logr[bi], 3), color: COLORS["ascat-point"] });
+        if (B.baf && B.baf[bi] != null) rows.push({ k: "BAF", v: fmtNum(B.baf[bi], 3), color: COLORS["ascat-point"] });
+        if (B.cn && B.cn[bi] != null) rows.push({ k: "CN", v: fmtNum(B.cn[bi], 2), color: COLORS["delly-point"] });
+      }
+    }
+    var near = svVis.filter(function (o) { return o.xs.some(function (xx) { return xx != null && Math.abs(xx - x) <= 5; }); }).slice(0, 4);
+    near.forEach(function (o) {
+      var r = o.r;
+      var where = r[4] != null && r[4] !== r[1] ? chrLabel(r[1]) + ":" + fmtInt(r[2]) + " ↔ " + chrLabel(r[4]) + ":" + fmtInt(r[5]) : fmtBp(r[7]);
+      rows.push({ k: SV_NAMES[r[6]] + (r[13] ? " " + r[13] : ""), v: where + (r[9] && HAS_PASS && String(r[9]).toUpperCase() !== "PASS" ? " · " + r[9] : ""), color: svColor(r[6]) });
+    });
+    return { title: fmtLocus(g), rows: rows };
+  }
+  var drag = null;
+  tracks.forEach(function (tr) {
+    var cv = tr.cv;
+    cv.addEventListener("pointermove", function (e) {
+      var r = cv.getBoundingClientRect(), x = e.clientX - r.left;
+      if (drag) {
+        var a = Math.max(ML, Math.min(drag.x0, x)), b = Math.min(W - MR, Math.max(drag.x0, x));
+        tracks.forEach(function (o) { o.br.style.display = "block"; o.br.style.left = a + "px"; o.br.style.width = (b - a) + "px"; });
+      }
+      if (x < ML || x > W - MR) { hideTip(); tracks.forEach(function (o) { o.ch.style.display = "none"; }); return; }
+      tracks.forEach(function (o) { o.ch.style.display = "block"; o.ch.style.left = x + "px"; });
+      var tp = tipAt(x);
+      showTip(e.clientX, e.clientY, tp.title, tp.rows);
+    });
+    cv.addEventListener("pointerleave", function () { if (!drag) { hideTip(); tracks.forEach(function (o) { o.ch.style.display = "none"; }); } });
+    cv.addEventListener("pointerdown", function (e) {
+      if (e.pointerType === "touch") return;
+      var r = cv.getBoundingClientRect();
+      drag = { x0: e.clientX - r.left };
+      try { cv.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+    });
+    cv.addEventListener("pointerup", function (e) {
+      if (!drag) return;
+      var r = cv.getBoundingClientRect(), x = e.clientX - r.left;
+      var a = Math.max(ML, Math.min(drag.x0, x)), b = Math.min(W - MR, Math.max(drag.x0, x));
+      drag = null;
+      tracks.forEach(function (o) { o.br.style.display = "none"; });
+      if (b - a > 6) {
+        var ga = Math.max(0, xs.inv(a)), gb = Math.min(GLEN, xs.inv(b));
+        if (gb - ga > 1e4) { hideTip(); setRegion([ga, gb]); }
+      }
+    });
+    cv.addEventListener("dblclick", function () {
+      var ci = chromAt(region[0]);
+      var isChrom = region[0] === OFF[ci] && region[1] === OFF[ci] + CH[ci].len;
+      setRegion(isChrom || region[1] - region[0] >= GLEN * 0.999 ? null : [OFF[ci], OFF[ci] + CH[ci].len]);
+    });
+  });
+}
+
+/* --------------------------- data & mapping ---------------------------- */
+function renderData(root) {
+  clear(root);
+  var sc = card(t("sources"));
+  var cols = [
+    { label: t("file"), get: function (s) { return s.file; } },
+    { label: t("sheet"), get: function (s) { return s.sheet; } },
+    { label: t("kind"), get: function (s) { return t("kind_" + s.kind); } },
+    { label: t("header_row"), num: true, get: function (s) { return s.header_row; } },
+    { label: t("rows"), num: true, get: function (s) { return s.rows; }, fmt: fmtInt },
+    { label: t("filtered"), num: true, get: function (s) { return s.filtered_out || null; }, fmt: fmtInt },
+    { label: t("mapping"), get: function (s) { return Object.keys(s.mapping).map(function (k) { return k + " ← " + s.mapping[k]; }).join(", "); } },
+    { label: t("unused"), get: function (s) { return s.unused_columns.length ? s.unused_columns.join(", ") : null; } }
+  ];
+  sc.appendChild(dataTable({ columns: cols, rows: D.meta.sources }));
+  root.appendChild(sc);
+
+  var wc = card(t("warnings"));
+  if (D.meta.warnings.length) wc.appendChild(h("ul", { class: "warnlist" }, D.meta.warnings.map(function (w) { return h("li", { text: w }); })));
+  else wc.appendChild(h("p", { class: "hint", text: t("no_warnings") }));
+  root.appendChild(wc);
+
+  if (ATTR.length) {
+    var ac = card(t("attr_list"));
+    ac.appendChild(dataTable({ columns: [
+      { label: t("field"), get: function (a) { return a.key; } },
+      { label: t("label"), get: function (a) { return lbl(a); } },
+      { label: t("type"), get: function (a) { return a.type; } },
+      { label: "order", get: function (a) { return a.order ? a.order.join(" < ") : null; } }
+    ], rows: ATTR }));
+    root.appendChild(ac);
+  }
+
+  var dc = card(t("definitions"));
+  var dl = h("dl", { class: "defs" });
+  [["purity", t("purity")], ["ploidy", t("ploidy")], ["wgd", "WGD"], ["gi", "GI"], ["loh", "LOH"], ["fga", "FGA"], ["state", t("state")], ["colors", LANG === "en" ? "Colours" : "颜色"]].forEach(function (kv) {
+    dl.appendChild(h("dt", { text: kv[1] })); dl.appendChild(h("dd", { text: t("def_" + kv[0]) }));
+  });
+  dc.appendChild(dl);
+  root.appendChild(dc);
+
+  var mc = card(t("raw_mapping"));
+  mc.appendChild(h("pre", { class: "json", text: JSON.stringify(D.meta.mapping, null, 2) }));
+  root.appendChild(mc);
+}
+
+/* ======================================================================= *
+ * boot
+ * ======================================================================= */
+var langBtn = document.getElementById("lang-btn");
+function applyLang() {
+  setLocale();
+  document.getElementById("title").textContent = loc(D.meta, "title");
+  document.getElementById("subtitle").textContent = loc(D.meta, "subtitle") || "";
+  document.title = loc(D.meta, "title");
+  langBtn.textContent = t("other_lang");
+  langBtn.setAttribute("aria-label", t("lang_aria"));
+  themeBtn.textContent = t("theme_" + THEME);
+  Array.prototype.forEach.call(tabsEl.querySelectorAll(".tab"), function (b) { b.textContent = t(b.getAttribute("data-key")); });
+  document.getElementById("metaline").textContent = [t("generated") + " " + D.meta.generated, t("genome") + " " + D.meta.genome,
+    fmtInt(P.length) + " " + t("patients")].join(" · ");
+}
+langBtn.addEventListener("click", function () {
+  LANG = LANG === "en" ? "zh" : "en";
+  store("shown-lang", LANG);
+  applyLang();
+  invalidateAll();
+});
+applyLang();
+applyTheme();
+readRoute();
+lastWidth = document.getElementById("main").clientWidth;
+function routeTab() { return ROUTE.tab && VIEWS.some(function (v) { return v.id === ROUTE.tab && v.show; }) ? ROUTE.tab : "overview"; }
+window.addEventListener("hashchange", function () {
+  var before = ROUTE.id;
+  ROUTE = {}; readRoute();
+  if (ROUTE.id !== before) PV.region = null;
+  DIRTY.patient = true;
+  go(routeTab());
+});
+go(routeTab());
+})();
+</script>
+</body>
+</html>

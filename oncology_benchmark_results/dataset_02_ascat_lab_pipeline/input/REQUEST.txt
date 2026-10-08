@@ -1,0 +1,1 @@
+Please produce ASCAT copy-number tracks, estimated purity/ploidy and BAF/LogR plots for each tumor. The columns have our local names.

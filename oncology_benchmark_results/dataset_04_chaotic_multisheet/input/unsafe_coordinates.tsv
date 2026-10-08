@@ -1,0 +1,5 @@
+case	chromsome	start	end
+P001	chr1	249250616	249251121
+P002	chr2	90000	45000
+P003	chrM	5	100
+P004	chrUn_GL000220	100	200
