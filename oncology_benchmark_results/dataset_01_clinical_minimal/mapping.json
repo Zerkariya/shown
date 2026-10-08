@@ -1,0 +1,4 @@
+{"title":"Patient overview: survival follow-up","title_zh":"患者概览：生存随访",
+ "subtitle":"8 patients · roster and follow-up only (no purity, CNV or SV data)","subtitle_zh":"8 例患者 · 仅名单与随访（无纯度、CNV、SV 数据）",
+ "tables":[{"file":"input/case_notes.csv","kind":"patients","columns":{"patient":"病例号"}}],
+ "attributes":{"生存(月)":{"label":"Survival","label_zh":"生存期","type":"numeric","unit":"months","unit_zh":"月"}}}

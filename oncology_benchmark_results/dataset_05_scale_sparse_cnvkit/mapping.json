@@ -1,0 +1,8 @@
+{"title":"CNVkit cohort: segments and bin-level profiles","title_zh":"CNVkit 队列：分段与 bin 级图谱","genome":"auto",
+ "tables":[
+  {"file":"input/cohort.call.cns","kind":"segments",
+   "columns":{"patient":"sample","chrom":"chromosome","start":"start","end":"end","logr":"log2","total_cn":"cn","major_cn":"cn1","minor_cn":"cn2","n_markers":"probes"}},
+  {"file":"input/cohort.snp.tsv.gz","kind":"bins",
+   "columns":{"patient":"ID_new","chrom":"Chr","pos":"POS","logr":"value","baf":"xb"}},
+  {"file":"input/P001.cnr","kind":"bins",
+   "columns":{"patient":{"from_filename":"^([^.]+)\\.cnr"},"chrom":"chromosome","start":"start","end":"end","logr":"log2"}}]}

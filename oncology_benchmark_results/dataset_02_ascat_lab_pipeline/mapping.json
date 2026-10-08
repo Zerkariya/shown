@@ -1,0 +1,12 @@
+{"title":"ASCAT copy-number report (lab pipeline)","title_zh":"ASCAT 拷贝数报告（实验室流程）","genome":"hg19","group_by":"BatchID",
+ "tables":[
+  {"file":"input/fit_parameters.tsv","kind":"patients",
+   "columns":{"patient":"Tumor_Sample_Barcode","purity":"puirty","ploidy":"psi_fit"}},
+  {"file":"input/alleleSegments.txt","kind":"segments",
+   "columns":{"patient":"Sample","chrom":"chromsome","start":"start.pos","end":"end.pos","major_cn":"nMajor","minor_cn":"nMinor","logr":"logR_mean","n_markers":"nSNP"},
+   "exclude":["Unnamed: 9"]},
+  {"file":"input/tumor_signals.tsv","kind":"bins",
+   "columns":{"patient":"PID","chrom":"chr","pos":"position_hg19","logr":"L2R","baf":"B_allele_frequency"}}],
+ "attributes":{"WGD_flag":{"label":"WGD flag (pipeline)","label_zh":"WGD 标记（流程）","type":"category"},
+  "BatchID":{"label":"Batch","label_zh":"批次"},
+  "qc_adjR2":{"label":"QC adjusted R²","label_zh":"QC 校正 R²","type":"numeric"}}}

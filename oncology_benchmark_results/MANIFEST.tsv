@@ -1,0 +1,16 @@
+file	rows_excluding_header	columns
+dataset_01_clinical_minimal/case_notes.csv	8	2
+dataset_02_ascat_lab_pipeline/fit_parameters.tsv	7	6
+dataset_02_ascat_lab_pipeline/alleleSegments.txt	1121	10
+dataset_02_ascat_lab_pipeline/tumor_signals.tsv	4484	5
+dataset_03_delly_breakpoints/calls.vcf	130	12
+dataset_03_delly_breakpoints/coverage.cov.gz	435	6
+dataset_03_delly_breakpoints/breakpoint_regions.seg.bed	100	4
+dataset_04_chaotic_multisheet/specimens_review.xlsx::Clinical notes	7	7
+dataset_04_chaotic_multisheet/specimens_review.xlsx::Arm-CN wide	44	6
+dataset_04_chaotic_multisheet/片段_本地流程.csv	764	5
+dataset_04_chaotic_multisheet/audit_export_38cols.tsv	5	38
+dataset_04_chaotic_multisheet/unsafe_coordinates.tsv	4	4
+dataset_05_scale_sparse_cnvkit/cohort.call.cns	31148	9
+dataset_05_scale_sparse_cnvkit/cohort.snp.tsv.gz	300000	6
+dataset_05_scale_sparse_cnvkit/P001.cnr	40	6
