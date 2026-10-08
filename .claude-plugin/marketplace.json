@@ -1,0 +1,14 @@
+{
+  "name": "shown",
+  "owner": { "name": "zerkariya" },
+  "description": "Plugins from zerkariya/shown: turn patient / genomics tables into offline HTML reports.",
+  "plugins": [
+    {
+      "name": "shown",
+      "source": "./plugins/shown",
+      "description": "CSV / Excel / VCF -> offline HTML report in the style of Delly (SV, read depth) and ASCAT (allele-specific copy number, purity, ploidy). The agent maps any column layout.",
+      "version": "1.0.0",
+      "category": "data-visualization"
+    }
+  ]
+}
