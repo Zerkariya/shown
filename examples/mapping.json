@@ -1,0 +1,143 @@
+{
+  "title": "Cohort A - copy number and structural variant report",
+  "title_zh": "队列 A 拷贝数与结构变异报告",
+  "subtitle": "Simulated data · 40 patients · ASCAT copy number + Delly structural variants",
+  "subtitle_zh": "模拟数据 · 40 例患者 · ASCAT 拷贝数 + Delly 结构变异",
+  "language": "en",
+  "genome": "hg38",
+  "group_by": "Cancer type",
+  "insights": [
+    "Whole-genome doubling in 22 of 40 patients (55%); median ploidy 3.85, median purity 64%.",
+    "Most frequent chromosome-level gains (more than half of the chromosome above round(ploidy)): chr8 and chr20 (43% of patients each), then chr1 (28%).",
+    "Most frequent chromosome-level losses: chr18 (20%) and chr13 (18%).",
+    "5,664 SV calls, 98% PASS; deletions (44%) and duplications (36%) dominate, followed by inversions (9%).",
+    "All data in this example are simulated."
+  ],
+  "insights_zh": [
+    "40 例中 22 例（55%）发生全基因组加倍；中位倍性 3.85，中位纯度 64%。",
+    "最常见的染色体水平扩增（超过半条染色体高于 round(倍性)）：chr8 与 chr20（各 43% 的患者），其次 chr1（28%）。",
+    "最常见的染色体水平缺失：chr18（20%）与 chr13（18%）。",
+    "共 5,664 个结构变异，98% 为 PASS；以缺失（44%）和重复（36%）为主，其次是倒位（9%）。",
+    "本示例全部为模拟数据。"
+  ],
+  "tables": [
+    {
+      "file": "fake/patients.xlsx",
+      "sheet": "Patients",
+      "kind": "patients",
+      "columns": {
+        "patient": "Patient No.",
+        "purity": "Tumor purity",
+        "ploidy": "Ploidy",
+        "goodness_of_fit": "GoF (%)",
+        "sex": "Gender"
+      },
+      "transforms": {
+        "purity": [
+          {
+            "op": "divide",
+            "value": 100
+          }
+        ]
+      }
+    },
+    {
+      "file": "fake/segments.tsv",
+      "kind": "segments",
+      "columns": {
+        "patient": "sample",
+        "chrom": "chr",
+        "start": "startpos",
+        "end": "endpos",
+        "major_cn": "nMajor",
+        "minor_cn": "nMinor",
+        "major_raw": "nAraw",
+        "minor_raw": "nBraw"
+      }
+    },
+    {
+      "file": "fake/sv_calls.csv",
+      "kind": "variants",
+      "columns": {
+        "patient": "SAMPLE",
+        "chrom": "CHROM",
+        "pos": "POS",
+        "id": "ID",
+        "svtype": "SVTYPE",
+        "end": "END",
+        "chrom2": "CHR2",
+        "pos2": "POS2",
+        "svlen": "SVLEN",
+        "pe": "PE",
+        "sr": "SR",
+        "precise": "PRECISION",
+        "qual": "QUAL",
+        "filter": "FILTER",
+        "genotype": "GT"
+      }
+    },
+    {
+      "file": "fake/snp_data.tsv.gz",
+      "kind": "bins",
+      "columns": {
+        "patient": "Sample",
+        "chrom": "Chromosome",
+        "pos": "Position",
+        "logr": "LogR",
+        "baf": "BAF",
+        "cn": "CN"
+      }
+    }
+  ],
+  "attributes": {
+    "Age": {
+      "type": "numeric",
+      "label_zh": "年龄",
+      "unit": "y",
+      "unit_zh": "岁"
+    },
+    "Gender": {
+      "type": "category",
+      "label_zh": "性别"
+    },
+    "Cancer type": {
+      "type": "category",
+      "label_zh": "癌种"
+    },
+    "Clinical stage": {
+      "type": "ordinal",
+      "order": [
+        "I",
+        "II",
+        "III",
+        "IV"
+      ],
+      "label_zh": "临床分期"
+    },
+    "Smoking history": {
+      "type": "category",
+      "order": [
+        "Yes",
+        "No",
+        "Unknown"
+      ],
+      "label_zh": "吸烟史"
+    },
+    "Diagnosis date": {
+      "type": "date",
+      "label_zh": "诊断日期"
+    },
+    "Treatment": {
+      "type": "category",
+      "label_zh": "治疗方案"
+    },
+    "Follow-up (months)": {
+      "type": "numeric",
+      "label_zh": "随访（月）"
+    },
+    "Notes": {
+      "type": "category",
+      "label_zh": "备注"
+    }
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "name": "shown",
+  "version": "1.0.0",
+  "description": "Turn patient / cohort tables with any set of columns (CSV, TSV, Excel, VCF) into a single offline HTML report styled after Delly and ASCAT output.",
+  "author": {
+    "name": "zerkariya"
+  },
+  "repository": "https://github.com/zerkariya/shown",
+  "keywords": [
+    "csv",
+    "excel",
+    "report",
+    "visualization",
+    "copy-number",
+    "cnv",
+    "structural-variant",
+    "ascat",
+    "delly",
+    "genomics"
+  ]
+}

@@ -1,0 +1,167 @@
+---
+name: csv-report
+description: Turn patient or cohort tables whose columns are not known in advance (CSV, TSV, TXT, Excel .xlsx, VCF; gzipped too) into one self-contained offline HTML report styled after Delly (structural variants, read-depth copy number) and ASCAT (allele-specific copy-number profile, purity, ploidy). Use when someone wants to visualize, chart, summarize or build a report/dashboard from patient information, clinical tables, CNV / copy-number segments, SV calls, logR/BAF, or ASCAT / Delly results.
+---
+
+# csv-report: any table -> Delly / ASCAT style HTML report
+
+The column layout of the input is **not fixed**. Your job is the part a script
+cannot do: read the headers and values (any language, any naming), decide what
+each column means, and write a `mapping.json`. Two bundled scripts do the rest
+deterministically:
+
+- `scripts/profile_table.py`: prints, for every column, its type, missing and
+  unique counts, a value summary, and *hints* about the column's likely role.
+- `scripts/build_report.py`: reads `mapping.json`, normalizes the data, computes
+  ASCAT-style metrics, and writes one HTML file. The file has no network
+  dependencies and opens by double-click.
+
+The scripts live next to this file. In Claude Code this directory is
+`${CLAUDE_SKILL_DIR}`. In other agents (Codex etc.) use the directory that
+contains this SKILL.md. Below, `$SKILL` stands for that directory. Only
+`python3` (3.8+) is needed; there are no packages to install.
+
+## Workflow
+
+1. **Find the inputs.** Use the files the user gave or pointed to. If none were
+   given, look in the working directory for `*.csv *.tsv *.txt *.xlsx *.vcf(.gz)`.
+   Ask only if that is ambiguous. Never modify the input files. Put everything
+   you write (mapping, helper scripts, report) in an output folder such as
+   `./report/`.
+
+2. **Profile every input file:**
+   ```bash
+   python3 "$SKILL/scripts/profile_table.py" data/*.csv data/*.xlsx
+   ```
+   Every sheet of an .xlsx is profiled. The header row is auto-detected (title
+   rows above it are skipped); override with `--header-row N`. Read the hints,
+   but judge from the values: hints are heuristics.
+
+3. **Decide what each table is and write `mapping.json`.** The full schema with
+   examples is in `references/mapping.md`; read it the first time. Each input
+   file becomes one entry in `tables` with a `kind`:
+
+   | kind | one row is | required fields |
+   |---|---|---|
+   | `patients` | a patient / sample (clinical info, purity, ploidy, any extra columns) | `patient` |
+   | `segments` | a copy-number segment (ASCAT `segments.txt`, Delly `seg.bed`, CNVkit, any CN table) | `patient chrom start end` + one of `major_cn`+`minor_cn` / `total_cn` / `logr` |
+   | `variants` | an SV / CNV call (Delly VCF or `bcftools query` export, any SV table) | `chrom pos` |
+   | `bins` | a genomic bin or SNP (Delly `cov.gz`, ASCAT LogR/BAF) | `chrom` + `pos` or `start` |
+
+   How to decide:
+   - Map *meaning*, not names. For example, `患者编号`, `Sample_ID`, `case` and
+     `Tumor_Sample_Barcode` are all `patient`. `肿瘤纯度`, `cellularity` and
+     `ACF` are all `purity`.
+   - Every column of a `patients` table that you do not map becomes a displayed
+     attribute automatically. Configure labels, types (`numeric`, `category`,
+     `ordinal` with an `order`, `date`, `text`) and units in the top-level
+     `attributes` object.
+   - When patient-level columns repeat on every row of a genomic table (a
+     "wide" export), list them in that table's `attributes`. They are lifted to
+     the patient.
+   - Fix units with `transforms`:
+     - purity given in percent: `{"op": "divide", "value": 100}`
+     - positions given in Mb: `multiply` by 1e6
+     - a combined `"2+1"` CN cell or a `chr1:100-200` locus: `regex` with a
+       `group` (the same source column can feed two fields)
+     - ratios that should be logR: `log2`
+   - Chromosome spelling (`chr1`, `1`, `23`, `chrX`) and SV type synonyms
+     (`deletion`, `TRA`, `<DEL>`, `缺失`) are normalized automatically.
+   - Set `genome` (`hg19` / `hg38` / `chm13`) when you can tell; otherwise the
+     builder infers it from coordinates and warns.
+   - Set `group_by` to the clinical attribute that best splits the cohort (2-6
+     groups, e.g. cancer type). It colours the purity/ploidy scatter and sorts
+     the heatmap.
+   - The report is English-first, with a one-click 中文 toggle in the page.
+     - Write `title`, `subtitle`, attribute `label`s and `insights` in English.
+     - Add `title_zh`, `subtitle_zh`, `label_zh` (and `unit_zh`) and
+       `insights_zh` so the Chinese view is complete as well.
+     - Set `"language": "zh"` only when the user wants Chinese as the default
+       view.
+   - **Privacy:** never display direct identifiers (patient names, national ID
+     or phone numbers, addresses, MRNs) as attributes. Put them in `exclude` /
+     `hide_attributes`, unless the user explicitly asks for them. Tell the user
+     which columns you left out.
+   - If a mapping decision would change the result and the data cannot settle
+     it, ask one short question. Example: two candidate ID columns that
+     disagree.
+
+   `references/formats.md` describes the native Delly and ASCAT outputs and
+   their ready-made mappings.
+
+4. **Validate and iterate:**
+   ```bash
+   python3 "$SKILL/scripts/build_report.py" report/mapping.json --check
+   ```
+   Errors name the problem and suggest close column names. Fix the mapping and
+   re-run until it passes. Then read the printed `warnings` (dropped rows,
+   unknown contigs, percent purity, genome guess, patients missing from a table)
+   and fix what is fixable.
+
+5. **Optional: insights.** From the printed `summary` only, write 3-6 short,
+   factual observations into `"insights"` (e.g. "8q gain in 43% of patients;
+   WGD in 55%"), with the same points in Chinese in `"insights_zh"`. Do not
+   speculate beyond the numbers and give no clinical advice. The report labels
+   them as AI-written.
+
+6. **Build:**
+   ```bash
+   python3 "$SKILL/scripts/build_report.py" report/mapping.json -o report/report.html
+   ```
+
+7. **Report back** in the user's language with:
+   - the output path
+   - a one-line description of each table and how you mapped it
+   - assumptions you made (units, genome build, excluded columns)
+   - the remaining warnings
+   - how to open the report: double-click, works offline, and the file
+     contains the data, so share it as carefully as the data itself
+
+## When the shape does not fit
+
+If a table cannot be expressed as one of the four kinds, write a small
+preprocessing script in the output folder that produces a tidy CSV, then map
+that CSV. Keep the script next to the report so the result can be reproduced.
+Examples:
+- one column per chromosome arm
+- CN encoded in a sheet layout
+- several patients side by side in column blocks
+
+ASCAT's `Tumor_LogR.txt` / `Tumor_BAF.txt` (one column per sample) do **not**
+need this: add one `bins` entry per sample with `"patient": {"value": "S1"}` and
+`"logr": "S1"`.
+
+## What the report contains
+
+- **Overview (概览)**
+  - stat tiles
+  - AI notes
+  - purity vs ploidy scatter
+  - one chart per patient attribute, whatever the columns are
+  - a sortable, searchable patient table
+- **Copy number (拷贝数)**
+  - cohort gain/loss frequency across the genome
+  - a patients × genome heatmap (relative to round(ploidy))
+- **Structural variants (结构变异)**
+  - SVs per patient stacked by type
+  - size and per-chromosome distributions
+  - a filterable table of calls (VCF fields)
+- **Patient (患者详情)**
+  - ASCAT profile: rounded (red nMajor, blue nMinor) or unrounded (purple
+    total, green minor), on real chromosome coordinates like
+    `ascat.plotAdjustedAscatProfile`
+  - Delly read-depth CN track: dots, plus a green segment line
+  - LogR and BAF tracks: red points, blue segmented / fitted values (as in
+    ASCAT's ASPCF plot)
+  - SV arcs
+  - zoom: drag on a track, or pick a chromosome
+- **Data & mapping (数据与映射)**
+  - which file and column fed which field
+  - unused columns and warnings
+  - metric definitions
+  - the raw `mapping.json`, so anyone can audit what the AI decided
+
+Every page has an English / 中文 toggle and a light / dark theme toggle.
+
+Metrics follow `ascat.metrics`: WGD, GI, LOH, homdel_*, mode_majA/minA, and
+FGA. They are computed from segments when allele-specific CN is available.
