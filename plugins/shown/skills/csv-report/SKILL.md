@@ -105,9 +105,9 @@ contains this SKILL.md. Below, `$SKILL` stands for that directory. Only
      `DIRECT IDENTIFIER?`. Put them in `exclude` / `hide_attributes`, unless
      the user explicitly asks for them. Tell the user which columns you left
      out.
-   - If a mapping decision would change the result and the data cannot settle
-     it, ask one short question. Example: two candidate ID columns that
-     disagree.
+   - Note every decision you are not sure about while you map: an ambiguous ID
+     column, a unit, an opaque column name you interpreted, a preprocessing
+     choice. Step 5 asks the user about them; do not settle them silently.
 
    `references/formats.md` describes the native Delly, ASCAT and CNVkit outputs
    and their ready-made mappings.
@@ -126,9 +126,51 @@ contains this SKILL.md. Below, `$SKILL` stands for that directory. Only
    - borderline WGD calls
    - overlapping segments
 
-   Add `--stats-json report/summary.json` to keep the summary as a file.
+   It then prints `questions for the user`, decisions the data checks cannot
+   settle (ploidy vs segments, sex, overlapping sources, ID mismatches, genome
+   build, …), each with a suggested default. Add `--stats-json
+   report/summary.json` to keep the summary, warnings and questions as a file.
 
-5. **Optional: insights.** From the printed `summary` only, write 3-6 short,
+5. **Confirm with the user before building. This step is required.** Send
+   ONE message, in the user's language, and wait for the answer:
+   - **What you understood:** one line per file: what it is, what one row
+     is, the key columns → roles, units, genome build.
+   - **What you will leave out:** direct identifiers you will hide, columns
+     you could not interpret, data that cannot be drawn.
+   - **Numbered questions, each with your suggested default.** Include:
+     - every item under `questions for the user` from step 4;
+     - every uncertain decision you noted in step 3: ID columns that do not
+       match across files, unclear units, opaque columns (`V3`, `F12`, pinyin
+       abbreviations) whose meaning you inferred, how to handle a shape that
+       needs preprocessing, and which attribute to `group_by` when several fit.
+   - End with: reply with changes, or "OK" to accept all defaults.
+
+   Rules:
+   - Keep it short. Merge related points and ask at most about 7 questions.
+     Skip what the user already told you or what the data settles beyond
+     doubt.
+   - When there are more than 7, ask in this order and state the rest as
+     defaults in the summary:
+     1. anything that changes the calls or the plots: patient IDs, ploidy,
+        sex, genome build, which source to draw, units;
+     2. columns whose meaning you inferred;
+     3. presentation: `group_by`, title.
+   - Do not ask about the report language. The default view is English and
+     the page has a 中文 button; mention that. Set `"language": "zh"` only if
+     the user asked for Chinese as the default.
+   - Use your environment's structured question tool if it has one (e.g.
+     `AskUserQuestion` in Claude Code, which takes up to 4 questions per
+     call); otherwise ask in plain text. Do not build the report (step 7)
+     until the user has answered.
+   - Apply the answers to `mapping.json` and re-run `--check`. Ask again only
+     about new questions the answers created.
+   - Skip the confirmation only when the user said not to ask ("just do it",
+     "不用问"), or when no person will read your reply before the run ends
+     (a scheduled or headless batch job). A normal chat counts as
+     interactive, even without a question tool. When you skip, use the
+     defaults and list every one of them as an assumption in step 8.
+
+6. **Optional: insights.** From the printed `summary` only, write 3-6 short,
    factual observations into `"insights"` (e.g. "chr8 gain in 43% of
    patients; WGD in 55%"), with the same points in Chinese in
    `"insights_zh"`. Do not speculate beyond the numbers and give no clinical
@@ -138,15 +180,15 @@ contains this SKILL.md. Below, `$SKILL` stands for that directory. Only
      or "focal".
    - Mention it when `WGD_borderline` is above 0.
 
-6. **Build:**
+7. **Build:**
    ```bash
    python3 "$SKILL/scripts/build_report.py" report/mapping.json -o report/report.html
    ```
 
-7. **Report back** in the user's language with:
+8. **Report back** in the user's language with:
    - the output path
    - a one-line description of each table and how you mapped it
-   - assumptions you made (units, genome build, excluded columns)
+   - what the user confirmed, and any defaults you used without confirmation
    - the remaining warnings
    - how to open the report: double-click, works offline, and the file
      contains the data, so share it as carefully as the data itself
@@ -173,8 +215,11 @@ Examples:
   and the user wants that. Arm boundaries need centromere positions for the
   right genome build (e.g. the UCSC cytoBand file). Ask the user for that
   file rather than guessing coordinates.
-- If segments for the same patients also exist, check whether the two
-  sources agree, and tell the user.
+- If segments for the same patients also exist, mention in step 5 that there
+  are two copy-number sources and ask which one is authoritative. A rough
+  agreement check is optional; without centromere positions, compare the
+  first and last segment of each chromosome with the p and q arm calls. Say
+  that it is approximate.
 
 ASCAT's `Tumor_LogR.txt` / `Tumor_BAF.txt` (one column per sample) do **not**
 need this: add one `bins` entry per sample with `"patient": {"value": "S1"}` and
