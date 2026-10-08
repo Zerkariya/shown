@@ -387,6 +387,26 @@ class BenchmarkFixTests(FixtureMixin, unittest.TestCase):
         losses = build_report.summarize(data).get("chromosome_losses", [])
         self.assertNotIn("chrX", [c for c, _ in losses])
 
+    def test_questions_for_the_user(self):
+        rows = "".join("%s,%s,1,%d,%d,%d\n" % r for r in [("M1", "1", 249000000, 1, 1), ("M1", "X", 155000000, 1, 0)])
+        self.write("s.csv", "id,chr,s,e,maj,min\n" + rows)
+        self.write("p.csv", "id,ploidy,purity\nM1,3.9,60\n")
+        m = self.mapping({"genome": "hg19", "tables": [
+            {"file": "p.csv", "kind": "patients", "columns": {"patient": "id", "ploidy": "ploidy", "purity": "purity"}},
+            {"file": "s.csv", "kind": "segments", "columns": {"patient": "id", "chrom": "chr", "start": "s", "end": "e",
+                                                               "major_cn": "maj", "minor_cn": "min"}}]})
+        r = run([os.path.join(SCRIPTS, "build_report.py"), m, "--check"])
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("questions for the user (confirm before building", r.stdout)
+        for topic in ("[ploidy]", "[sex]", "[purity]"):
+            self.assertIn(topic, r.stdout)
+        self.assertIn("[default:", r.stdout)
+        # a clean mapping says so explicitly
+        self.write("q.csv", "id,age\nA,50\n")
+        m2 = self.mapping({"tables": [{"file": "q.csv", "kind": "patients", "columns": {"patient": "id"}}]}, "m2.json")
+        r2 = run([os.path.join(SCRIPTS, "build_report.py"), m2, "--check"])
+        self.assertIn("questions for the user: none", r2.stdout)
+
     def test_benchmark_mappings_still_build(self):
         bench = os.path.join(ROOT, "oncology_benchmark_results")
         if not os.path.isdir(bench):

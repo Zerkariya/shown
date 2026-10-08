@@ -67,8 +67,9 @@ The agent then:
 1. runs `profile_table.py` on every column
 2. writes `report/mapping.json`
 3. runs `build_report.py --check` and fixes any errors
-4. builds `report/report.html`
-5. tells you how each table was mapped, what it assumed, and which sensitive columns it hid
+4. **asks you to confirm before building**: one short message saying how it read each file and which columns it will hide, plus numbered questions with suggested answers. Reply with changes, or "OK" to accept them all; say "just do it" up front to skip this step.
+5. builds `report/report.html`
+6. tells you how each table was mapped, what you confirmed, and any defaults it used
 
 Keep `mapping.json`; when the data is updated you can rebuild with it directly.
 

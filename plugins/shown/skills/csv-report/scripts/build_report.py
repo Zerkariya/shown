@@ -32,7 +32,7 @@ sys.path.insert(0, HERE)
 import tableio  # noqa: E402
 
 TEMPLATE = os.path.join(HERE, "..", "assets", "report_template.html")
-VERSION = "1.2.0"
+VERSION = "1.3.0"
 
 GENOMES = {
     # 1..22, X, Y lengths; X/Y lengths for hg19/hg38/CHM13 (ASCAT ships 1..22,X for all three)
@@ -81,6 +81,11 @@ ISO_DATE = re.compile(r"^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})")
 
 class MappingError(Exception):
     pass
+
+
+def ask(questions, topic, question, default):
+    """Record a decision the agent must confirm with the user before building (SKILL.md step 5)."""
+    questions.append({"topic": topic, "question": question, "default": default})
 
 
 # --------------------------------------------------------------------------- #
@@ -380,7 +385,7 @@ def coerce_attr(value, typ):
 # --------------------------------------------------------------------------- #
 # genome
 # --------------------------------------------------------------------------- #
-def choose_genome(setting, maxpos, warnings):
+def choose_genome(setting, maxpos, warnings, questions):
     present = set(maxpos)
     if isinstance(setting, dict) and "chroms" in setting:
         chroms = [[str(c), int(l)] for c, l in setting["chroms"]]
@@ -389,6 +394,8 @@ def choose_genome(setting, maxpos, warnings):
     human = [c for c in present if c in HUMAN_CHROMS]
     if name is None and present and len(human) < 0.5 * len(present):
         chroms = [[c, int(maxpos[c])] for c in sorted(present, key=natural_key)]
+        ask(questions, "genome", "The chromosome names are not human (1-22, X, Y). Is this a non-human genome?",
+            "yes - use the largest coordinate per chromosome as its length")
         warnings.append("chromosome names are not human (1-22, X, Y); using the largest coordinate per chromosome "
                         "as its length")
         return "from-data", chroms
@@ -405,6 +412,8 @@ def choose_genome(setting, maxpos, warnings):
         if len(fits) != 1:
             warnings.append("genome build not given; positions fit %s - assumed %s (set \"genome\" in the mapping "
                             "to be explicit)" % (", ".join(fits) or "no human build", name))
+            ask(questions, "genome", "Which genome build are the coordinates on? They fit %s."
+                % (" and ".join(fits) or "no standard human build"), name)
         else:
             warnings.append("genome build not given; inferred %s from the coordinates (set \"genome\" in the "
                             "mapping to be explicit)" % name)
@@ -414,6 +423,9 @@ def choose_genome(setting, maxpos, warnings):
     if over:
         warnings.append("positions exceed %s chromosome lengths on %s - wrong genome build or position units?"
                         % (name, ", ".join(sorted(over, key=natural_key))))
+        ask(questions, "genome", "Positions exceed the %s chromosome lengths on %s. Are the coordinates on another "
+            "genome build, or in other units (kb / Mb)?" % (name, ", ".join(sorted(over, key=natural_key)[:6])),
+            "check the source before building")
     return name, chroms
 
 
@@ -478,7 +490,7 @@ def ascat_metrics(segs):
     return out
 
 
-def consistency_warnings(out_patients, segs_by):
+def consistency_warnings(out_patients, segs_by, questions):
     """Cross-checks between mapped values and the segments; each points at a likely mapping problem."""
     warns = []
     ploidy_off, male_x, borderline, overlap, no_sex = [], [], [], [], []
@@ -513,10 +525,16 @@ def consistency_warnings(out_patients, segs_by):
                      "%s. Gain/loss calls use round(ploidy), so a wrong ploidy turns large parts of the genome into "
                      "'gain' or 'loss'. Check that the ploidy column belongs to the same analysis as the segments, or "
                      "leave ploidy unmapped to derive it from the segments." % (len(ploidy_off), ", ".join(ploidy_off[:6])))
+        ask(questions, "ploidy", "The ploidy column disagrees with the copy-number segments for %d patient(s) (%s). "
+            "Which should set the gain/loss baseline?" % (len(ploidy_off), ", ".join(ploidy_off[:3])),
+            "the ploidy implied by the segments (leave the ploidy column unmapped)")
     if male_x:
         warns.append("chrX is at the autosomal copy-number level in %d male (XY) patient(s): %s. Mapped sex halves the "
                      "X/Y baseline for XY, so this shows as an X gain. Either the CN caller did not adjust X for sex, or "
                      "the sex column is wrong; consider leaving 'sex' unmapped." % (len(male_x), ", ".join(male_x[:6])))
+        ask(questions, "sex", "chrX in %d male patient(s) is at the autosomal copy-number level (%s). Did the "
+            "copy-number caller adjust chrX for sex?" % (len(male_x), ", ".join(male_x[:3])),
+            "no - leave sex unmapped, so X/Y are not called")
     if borderline:
         warns.append("WGD call is borderline for %d patient(s) (the two most common major-allele states cover almost "
                      "the same share of the genome): %s. Treat their WGD / GI values with care."
@@ -526,9 +544,14 @@ def consistency_warnings(out_patients, segs_by):
                      "gain/loss calls (heatmap, frequency plot, summary) instead of showing male X/Y as 'loss'. Map "
                      "'sex' to include them, if the CN caller adjusted X for sex."
                      % (len(no_sex), ", ".join(no_sex[:6]) + (" ..." if len(no_sex) > 6 else "")))
+        ask(questions, "sex", "Sex is unknown for %d patient(s), so chrX/chrY gains and losses are not called. Is "
+            "there a sex column or file to add?" % len(no_sex), "no - leave X/Y uncalled")
     if overlap:
         warns.append("copy-number segments overlap within %d patient(s): %s. Usually two CN sources were mapped to the "
                      "same patient; keep one segments table per patient." % (len(overlap), ", ".join(overlap[:8])))
+        ask(questions, "sources", "Copy-number segments overlap for %d patient(s) (%s), usually because two CN "
+            "sources were mapped. Which source should be drawn?" % (len(overlap), ", ".join(overlap[:3])),
+            "the first segments table in the mapping")
     return warns
 
 
@@ -536,7 +559,7 @@ def consistency_warnings(out_patients, segs_by):
 # build
 # --------------------------------------------------------------------------- #
 def build(mapping, base):
-    warnings = []
+    warnings, questions = [], []
     tables = mapping.get("tables")
     if not tables:
         raise MappingError("mapping has no 'tables' list")
@@ -677,6 +700,8 @@ def build(mapping, base):
         warnings.append("%d segment row(s) had end < start and were read with start and end swapped: %s. Check the "
                         "source; this usually means mis-ordered columns or a broken export"
                         % (len(seg_swapped), ", ".join(seg_swapped[:5])))
+        ask(questions, "segments", "%d segment row(s) have end < start (%s). Read them with start and end swapped, or "
+            "is a column mapped wrongly?" % (len(seg_swapped), ", ".join(seg_swapped[:3])), "swap them")
     lift_attrs(loaded["segments"])
 
     svs = []
@@ -735,6 +760,8 @@ def build(mapping, base):
     if sv_missing:
         warnings.append("%d variant rows skipped (missing patient, chromosome or position)" % sv_missing)
     if single_patient_tables:
+        ask(questions, "patient", "A variants table has no patient column. Which patient do its calls belong to?",
+            "a single patient called 'sample'")
         warnings.append("a variants table has no patient column; its rows were assigned to patient 'sample' "
                         "(map 'patient' with {\"value\": \"ID\"} or {\"from_filename\": \"regex\"})")
     lift_attrs(loaded["variants"])
@@ -767,13 +794,15 @@ def build(mapping, base):
         warnings.append("bins for %d patient(s) come from more than one table (%s); their points are drawn together "
                         "in the same tracks. Keep one bins source per patient unless that is intended"
                         % (len(multi), ", ".join(multi[:8])))
+        ask(questions, "sources", "Bins for %d patient(s) come from more than one table (%s). Draw all of them "
+            "together, or keep one source?" % (len(multi), ", ".join(multi[:3])), "draw them together")
     lift_attrs(loaded["bins"])
 
     if not patients:
         raise MappingError("no patients found - check the 'patient' mapping")
 
     # ---------------- genome & chromosome indices ----------------
-    genome_name, chroms = choose_genome(mapping.get("genome", "auto"), maxpos, warnings)
+    genome_name, chroms = choose_genome(mapping.get("genome", "auto"), maxpos, warnings, questions)
     cindex = {c: i for i, (c, _) in enumerate(chroms)}
 
     def drop_unknown(c):
@@ -806,6 +835,8 @@ def build(mapping, base):
             if p["purity"] is not None:
                 p["purity"] = p["purity"] / 100.0
         warnings.append("purity values look like percentages (max %.4g); divided by 100" % max(pur))
+        ask(questions, "purity", "Purity values look like percentages (max %.4g) and were divided by 100. Is that "
+            "right?" % max(pur), "yes")
     gof = [p["goodness_of_fit"] for p in patients.values() if p["goodness_of_fit"] is not None]
     if gof and max(gof) <= 1.0:
         for p in patients.values():
@@ -815,6 +846,8 @@ def build(mapping, base):
     bad = [p["id"] for p in patients.values() if p["purity"] is not None and not (0 <= p["purity"] <= 1.05)]
     if bad:
         warnings.append("purity outside 0-1 for %d patient(s): %s" % (len(bad), ", ".join(bad[:8])))
+        ask(questions, "purity", "Purity is outside 0-1 for %d patient(s) (%s). Is the right column mapped as purity?"
+            % (len(bad), ", ".join(bad[:3])), "check the column before building")
 
     # ---------------- attributes ----------------
     attr_cfg = mapping.get("attributes") or {}
@@ -906,7 +939,7 @@ def build(mapping, base):
     if downsampled:
         warnings.append("bins down-sampled to %d points for %d patient(s) to keep the HTML light"
                         % (max_points, len(downsampled)))
-    warnings += consistency_warnings(out_patients, segs_by)
+    warnings += consistency_warnings(out_patients, segs_by, questions)
 
     sv_rows = []
     for s in svs:
@@ -924,6 +957,11 @@ def build(mapping, base):
     if no_genomic and (segs_by or svs or bins_by):
         warnings.append("%d patient(s) in the patients table have no genomic rows: %s"
                         % (len(no_genomic), ", ".join(no_genomic[:10])))
+    if missing_from_patient_table and no_genomic:
+        ask(questions, "patient", "%d patient ID(s) appear only in the genomic files (%s) and %d only in the patients "
+            "table (%s). Are some of them the same patients written differently (e.g. P001 vs P-001)?"
+            % (len(missing_from_patient_table), ", ".join(missing_from_patient_table[:3]), len(no_genomic),
+               ", ".join(no_genomic[:3])), "no - treat them as different patients")
 
     data = {
         "version": VERSION,
@@ -939,7 +977,7 @@ def build(mapping, base):
             "insights_zh": mapping.get("insights_zh") or [],
             "insights_label": mapping.get("insights_label"),
             "insights_label_zh": mapping.get("insights_label_zh"),
-            "sources": sources, "warnings": warnings,
+            "sources": sources, "warnings": warnings, "questions": questions,
             "mapping": mapping,
         },
         "chroms": chroms,
@@ -1099,9 +1137,17 @@ def main(argv=None):
             print("  - " + w)
     else:
         print("warnings: none")
+    qs = data["meta"]["questions"]
+    if qs:
+        print("questions for the user (confirm before building; suggested default in brackets):")
+        for i, q in enumerate(qs, 1):
+            print("  %d. [%s] %s [default: %s]" % (i, q["topic"], q["question"], q["default"]))
+    else:
+        print("questions for the user: none from the data checks")
     if args.stats_json:
         with open(args.stats_json, "w", encoding="utf-8") as fh:
-            json.dump(summary, fh, ensure_ascii=False, indent=1)
+            json.dump(dict(summary, warnings=data["meta"]["warnings"], questions=data["meta"]["questions"]),
+                      fh, ensure_ascii=False, indent=1)
     if args.check:
         print("check ok (no HTML written)")
         return 0
